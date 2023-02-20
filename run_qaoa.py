@@ -7,14 +7,14 @@ from qaoa_core import *
 
 
 def run_qaoa_main():
-    multi_angle = True
+    # TODO: simulation MA-QAOA
+    # TODO: graphs db interface
+    # TODO: choice between single edge or whole graph expectation
+    multi_angle = False
     p = 1  # Number of QAOA layers
     optimization_attempts = 10
     # Analytical expression parameters
     use_analytical = True
-    deg0 = 3
-    deg1 = 3
-    num_triangles = 0
 
     graph = nx.Graph()
     graph.add_edge(0, 1, weight=1)
@@ -56,7 +56,7 @@ def run_qaoa_main():
             if multi_angle:
                 result = optimize.minimize(change_sign(run_ma_qaoa_analytical_p1), next_angles, (graph, ))
             else:
-                result = optimize.minimize(change_sign(run_qaoa_analytical_p1), next_angles, (deg0, deg1, num_triangles))
+                result = optimize.minimize(change_sign(run_qaoa_analytical_p1), next_angles, (graph, ))
         else:
             result = optimize.minimize(change_sign(run_qaoa_simulation), next_angles, (p, all_objective_vals, all_cuv_vals, neighbours, all_labelings))
 

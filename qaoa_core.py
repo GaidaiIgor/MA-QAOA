@@ -86,21 +86,9 @@ def run_qaoa_simulation(angles: ndarray, p: int, all_objective_vals: ndarray, al
     return calc_expectation_diagonal(psi, all_cuv_vals)
 
 
-def run_qaoa_analytical_p1(angles: ndarray, deg1: int, deg2: int, num_triangles: int) -> float:
-    # Runs QAOA by evaluating an analytical formula for <Cuv> when p=1
-    # deg1 and deg2 are degrees of vertices u and v, and num_triangles is the number of triangles containing edge (u, v)
-    # The formula is taken from Wang, Z., Hadfield, S., Jiang, Z. & Rieffel, E. G.
-    # Quantum approximate optimization algorithm for MaxCut: A fermionic view. Phys. Rev. A97(2), 022304 (2018)
-    beta = angles[0]
-    gamma = angles[1]
-    d = deg1 - 1
-    e = deg2 - 1
-    f = num_triangles
-    return 0.5 + 0.25 * sin(4 * beta) * sin(gamma) * (cos(gamma) ** d + cos(gamma) ** e) - \
-        0.25 * sin(2 * beta) ** 2 * cos(gamma) ** (d + e - f) * (1 - cos(2 * gamma) ** f)
-
-
 def run_ma_qaoa_analytical_p1(angles: ndarray, graph: Graph) -> float:
+    # Runs MA-QAOA by evaluating an analytical formula for <Cuv> when p=1 for all edges
+    # The formula is taken from Vijendran, V., Das, A., Koh, D. E., Assad, S. M. & Lam, P. K. An Expressive Ansatz for Low-Depth Quantum Optimisation. (2023)
     betas = angles[0:len(graph)]
     gammas = angles[len(graph):]
     nx.set_edge_attributes(graph, {(u, v): gammas[i] * w for i, (u, v, w) in enumerate(graph.edges.data('weight'))}, name='gamma')
@@ -126,6 +114,21 @@ def run_ma_qaoa_analytical_p1(angles: ndarray, graph: Graph) -> float:
         objective += cuv
 
     return objective
+
+
+def convert_angles_qaoa_to_multi_angle(angles: ndarray, graph: Graph) -> ndarray:
+    # Converts angles from QAOA format (2 per layer) to MA-QAOA format (individual angle for each node and edge of the graph)
+    maqaoa_angles = []
+    for beta, gamma in zip(angles[::2], angles[1::2]):
+        maqaoa_angles += [beta] * len(graph)
+        maqaoa_angles += [gamma] * len(graph.edges)
+    return np.array(maqaoa_angles)
+
+
+def run_qaoa_analytical_p1(angles: ndarray, graph: Graph):
+    # Runs classical QAOA. All betas and gammas are forced to be the same.
+    angles_maqaoa = convert_angles_qaoa_to_multi_angle(angles, graph)
+    return run_ma_qaoa_analytical_p1(angles_maqaoa, graph)
 
 
 def change_sign(func: Callable[[Any, ...], int | float]) -> Callable[[Any, ...], int | float]:
