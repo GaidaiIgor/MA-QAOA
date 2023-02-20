@@ -4,6 +4,7 @@ Implementation of the original Quantum Approximate Optimization Algorithm (QAOA)
 Both algorithms are designed to find approximate solutions to combinatorial optimization problems on quantum computers. 
 
 This implementation is purely classical, so it only calculates expectation values and does not give explicit answers to the combinatorial problems (since this usually requires a quantum computer).
+It works on arbitrary weighted graphs, including graphs with triangles.
 
 The main function is `run_qaoa_main` from `run_qaoa.py`. Run parameters and input graph are specified in the code at the beginning of `run_qaoa_main`.
 
