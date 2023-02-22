@@ -6,7 +6,7 @@ Both algorithms are designed to find approximate solutions to combinatorial opti
 This implementation is purely classical, so it only calculates expectation values and does not give explicit answers to the combinatorial problems (since this usually requires a quantum computer).
 It works on arbitrary weighted graphs, including graphs with triangles.
 
-To run the code, run `test_qaoa.py`. Run parameters and input graph can be specified in the code.
+To run the code, run `run_qaoa.py`. Run parameters and input graph can be specified in the code.
 
 For more info on QAOA refer to https://arxiv.org/abs/1411.4028v1
 
