@@ -8,6 +8,7 @@ import scipy.optimize as optimize
 from networkx import Graph
 from numba import njit
 from numpy import sin, cos
+import logging
 
 from preprocessing import *
 
@@ -222,15 +223,15 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
     assert not use_analytical or p == 1, "Cannot use analytical for p != 1"
 
     if not use_analytical:
-        print('Preprocessing...')
+        logging.debug('Preprocessing...')
         time_start = time.perf_counter()
         neighbours = get_neighbour_labelings(len(graph))
         all_labelings = get_all_binary_labelings(len(graph))
         all_cuv_vals = np.array([[check_edge_cut(labeling, u, v) for labeling in all_labelings] for (u, v) in graph.edges])
         time_finish = time.perf_counter()
-        print(f'Preprocessing done. Time elapsed: {time_finish - time_start}')
+        logging.debug(f'Preprocessing done. Time elapsed: {time_finish - time_start}')
 
-    print('Optimization...')
+    logging.debug('Optimization...')
     time_start = time.perf_counter()
     num_angles_per_layer = len(graph.edges) + len(graph) if multi_angle else 2
     angles_best = np.zeros(num_angles_per_layer * p)
@@ -258,5 +259,5 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
             angles_best = next_angles / np.pi
 
     time_finish = time.perf_counter()
-    print(f'Optimization done. Runtime: {time_finish - time_start}')
+    logging.debug(f'Optimization done. Runtime: {time_finish - time_start}')
     return objective_best
