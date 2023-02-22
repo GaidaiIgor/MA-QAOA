@@ -1,5 +1,7 @@
-from qaoa_core import *
+import networkx as nx
 import pytest
+
+from src.optimization import optimize_qaoa_angles
 
 
 class TestQAOA:

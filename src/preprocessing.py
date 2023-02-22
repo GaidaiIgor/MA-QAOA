@@ -1,3 +1,6 @@
+"""
+Functions that calculate auxiliary data structures to speed up quantum simulation.
+"""
 from itertools import product
 
 import bitarray.util as butil

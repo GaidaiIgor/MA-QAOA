@@ -1,4 +1,6 @@
-from qaoa_core import *
+import networkx as nx
+
+from src.optimization import optimize_qaoa_angles
 
 
 def run_main():
@@ -12,5 +14,6 @@ def run_main():
 
 
 # TODO: starting angles range
+# TODO: fix objective max
 if __name__ == "__main__":
     run_main()
