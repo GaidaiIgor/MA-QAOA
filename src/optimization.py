@@ -34,7 +34,7 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
     :param edge_list: List of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
     :return: Maximum expectation value achieved during optimization
     """
-    optimization_attempts = 10
+    max_no_improvements = 3
     assert not use_analytical or p == 1, "Cannot use analytical for p != 1"
 
     if not use_analytical:
@@ -52,13 +52,10 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
     time_start = time.perf_counter()
     num_angles_per_layer = len(graph.edges) + len(graph) if multi_angle else 2
     angles_best = np.zeros(num_angles_per_layer * p)
-    objective_max = sum([w for u, v, w in graph.edges.data('weight')])
     objective_best = 0
+    no_improvement_count = 0
 
-    for opt_ind in range(optimization_attempts):
-        if objective_max - objective_best < 1e-3:
-            break
-
+    while no_improvement_count < max_no_improvements:
         next_angles = np.random.uniform(-np.pi, np.pi, len(angles_best))
         if use_analytical:
             if multi_angle:
@@ -72,8 +69,11 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
                 result = optimize.minimize(change_sign(run_qaoa_simulation), next_angles, (p, all_cuv_vals, neighbours, all_labelings, edge_inds))
 
         if -result.fun > objective_best:
+            no_improvement_count = 0
             objective_best = -result.fun
             angles_best = next_angles / np.pi
+        else:
+            no_improvement_count += 1
 
     time_finish = time.perf_counter()
     logging.debug(f'Optimization done. Runtime: {time_finish - time_start}')
