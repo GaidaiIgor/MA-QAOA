@@ -101,17 +101,21 @@ def calc_expectation_diagonal(psi: ndarray, diagonal_vals: ndarray) -> float:
     return np.real(np.vdot(psi, diagonal_vals * psi))
 
 
-def run_ma_qaoa_simulation(angles: ndarray, p: int, all_cuv_vals: ndarray, neighbours: ndarray, basis_bin: ndarray) -> float:
+def run_ma_qaoa_simulation(angles: ndarray, p: int, all_cuv_vals: ndarray, neighbours: ndarray, basis_bin: ndarray, edge_inds: list[int] = None) -> float:
     """
     Runs MA-QAOA by direct simulation of quantum evolution. Dumb and slow, but easy to understand and does not require any additional knowledge.
     :param angles: 1D array of all angles for all layers. Format: First, all gammas for 1st layer (in the edge order),
     then all betas for 1st layer (in the nodes order), then the same format repeats for all other layers.
     :param p: Number of QAOA layers
-    :param all_cuv_vals: 2D array where each row is a diagonal of Cuv operator for each edge in the graph
+    :param all_cuv_vals: 2D array where each row is a diagonal of Cuv operator for each edge in the graph. Size: num_edges x 2^num_nodes
     :param neighbours: Structure calculated by get_neighbour_labelings
     :param basis_bin: Structure calculated by get_all_binary_labelings
+    :param edge_inds: Indices of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
     :return: Expectation value of C (sum of all Cuv) in the state corresponding to the given set of angles, i.e. <beta, gamma|C|beta, gamma>
     """
+    if edge_inds is None:
+        edge_inds = list(range(all_cuv_vals.shape[0]))
+
     psi = np.ones(all_cuv_vals.shape[1], dtype=np.complex128) / np.sqrt(all_cuv_vals.shape[1])
     num_angles_per_layer = int(len(angles) / p)
     for i in range(p):
@@ -120,7 +124,7 @@ def run_ma_qaoa_simulation(angles: ndarray, p: int, all_cuv_vals: ndarray, neigh
         psi = apply_uc(all_cuv_vals, gammas, psi)
         betas = layer_angles[all_cuv_vals.shape[0]:]
         psi = apply_ub_individual(betas, psi, neighbours, basis_bin)
-    return calc_expectation_diagonal(psi, np.sum(all_cuv_vals, 0))
+    return calc_expectation_diagonal(psi, np.sum(all_cuv_vals[edge_inds, :], 0))
 
 
 def convert_angles_qaoa_to_multi_angle(angles: ndarray, num_edges: int, num_nodes: int) -> ndarray:
@@ -138,7 +142,7 @@ def convert_angles_qaoa_to_multi_angle(angles: ndarray, num_edges: int, num_node
     return np.array(maqaoa_angles)
 
 
-def run_qaoa_simulation(angles: ndarray, p: int, all_cuv_vals: ndarray, neighbours: ndarray, basis_bin: ndarray) -> float:
+def run_qaoa_simulation(angles: ndarray, p: int, all_cuv_vals: ndarray, neighbours: ndarray, basis_bin: ndarray, edge_inds: list[int] = None) -> float:
     """
     Runs classical QAOA by direct simulation of quantum evolution. Dumb and slow, but easy to understand and does not require any additional knowledge.
     :param angles: 1D array of all angles for all layers. Format is the same as in run_ma_qaoa_simulation, except there is only one gamma and beta per layer.
@@ -146,25 +150,31 @@ def run_qaoa_simulation(angles: ndarray, p: int, all_cuv_vals: ndarray, neighbou
     :param all_cuv_vals: 2D array where each row is a diagonal of Cuv operator for each edge in the graph. Size: num_edges x 2^num_nodes
     :param neighbours: Structure calculated by get_neighbour_labelings
     :param basis_bin: Structure calculated by get_all_binary_labelings
+    :param edge_inds: Indices of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
     :return: Expectation value of C (sum of all Cuv) in the state corresponding to the given set of angles, i.e. <beta, gamma|C|beta, gamma>
     """
     angles_maqaoa = convert_angles_qaoa_to_multi_angle(angles, all_cuv_vals.shape[0], neighbours.shape[1])
-    return run_ma_qaoa_simulation(angles_maqaoa, p, all_cuv_vals, neighbours, basis_bin)
+    return run_ma_qaoa_simulation(angles_maqaoa, p, all_cuv_vals, neighbours, basis_bin, edge_inds)
 
 
-def run_ma_qaoa_analytical_p1(angles: ndarray, graph: Graph) -> float:
+def run_ma_qaoa_analytical_p1(angles: ndarray, graph: Graph, edge_list: list[tuple[int, int]] = None) -> float:
     """
     Runs MA-QAOA by evaluating an analytical formula for <Cuv> for all edges when p=1
     The formula is taken from Vijendran, V., Das, A., Koh, D. E., Assad, S. M. & Lam, P. K. An Expressive Ansatz for Low-Depth Quantum Optimisation. (2023)
     :param angles: 1D array of all angles for the first layer. Same format as in run_ma_qaoa_simulation.
     :param graph: Graph for which MaxCut problem is being solved
+    :param edge_list: List of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
     :return: Expectation value of C (sum of all Cuv) in the state corresponding to the given set of angles, i.e. <beta, gamma|C|beta, gamma>
     """
+    if edge_list is None:
+        edge_list = graph.edges
+
     gammas = angles[0:len(graph.edges)]
     betas = angles[len(graph.edges):]
     nx.set_edge_attributes(graph, {(u, v): gammas[i] * w for i, (u, v, w) in enumerate(graph.edges.data('weight'))}, name='gamma')
     objective = 0
-    for u, v, w in graph.edges.data('weight'):
+    for u, v in edge_list:
+        w = graph.edges[(u, v)]['weight']
         cuv = w / 2
         d = set(graph[u]) - {v}
         e = set(graph[v]) - {u}
@@ -187,15 +197,16 @@ def run_ma_qaoa_analytical_p1(angles: ndarray, graph: Graph) -> float:
     return objective
 
 
-def run_qaoa_analytical_p1(angles: ndarray, graph: Graph):
+def run_qaoa_analytical_p1(angles: ndarray, graph: Graph, edge_list: list[tuple[int, int]] = None):
     """
     Runs classical QAOA. All betas and gammas are forced to be the same.
     :param angles: 1D array of all angles for the first layer. Same format as in run_qaoa_simulation.
     :param graph: Graph for which MaxCut problem is being solved
+    :param edge_list: List of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
     :return: Expectation value of C (sum of all Cuv) in the state corresponding to the given set of angles, i.e. <beta, gamma|C|beta, gamma>
     """
     angles_maqaoa = convert_angles_qaoa_to_multi_angle(angles, len(graph.edges), len(graph))
-    return run_ma_qaoa_analytical_p1(angles_maqaoa, graph)
+    return run_ma_qaoa_analytical_p1(angles_maqaoa, graph, edge_list)
 
 
 def change_sign(func: Callable[[Any, ...], int | float]) -> Callable[[Any, ...], int | float]:
@@ -210,13 +221,14 @@ def change_sign(func: Callable[[Any, ...], int | float]) -> Callable[[Any, ...],
     return func_changed_sign
 
 
-def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph: Graph) -> float:
+def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph: Graph, edge_list: list[tuple[int, int]] = None) -> float:
     """
     Runs QAOA angle optimization
     :param multi_angle: True to use individual angles for each node and edge of the graph (MA-QAOA)
     :param use_analytical: True to use analytical expression to evaluate expectation value (available for p=1 only)
     :param p: Number of QAOA layers
     :param graph: Graph for which MaxCut problem is being solved
+    :param edge_list: List of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
     :return: Maximum expectation value achieved during optimization
     """
     optimization_attempts = 10
@@ -228,6 +240,8 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
         neighbours = get_neighbour_labelings(len(graph))
         all_labelings = get_all_binary_labelings(len(graph))
         all_cuv_vals = np.array([[check_edge_cut(labeling, u, v) for labeling in all_labelings] for (u, v) in graph.edges])
+        all_edge_list = list(graph.edges)
+        edge_inds = None if edge_list is None else [all_edge_list.index(edge) for edge in edge_list]
         time_finish = time.perf_counter()
         logging.debug(f'Preprocessing done. Time elapsed: {time_finish - time_start}')
 
@@ -236,7 +250,7 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
     num_angles_per_layer = len(graph.edges) + len(graph) if multi_angle else 2
     angles_best = np.zeros(num_angles_per_layer * p)
     objective_max = sum([w for u, v, w in graph.edges.data('weight')])
-    objective_best = objective_max / 2
+    objective_best = 0
 
     for opt_ind in range(optimization_attempts):
         if objective_max - objective_best < 1e-3:
@@ -245,14 +259,14 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
         next_angles = np.random.uniform(-np.pi, np.pi, len(angles_best))
         if use_analytical:
             if multi_angle:
-                result = optimize.minimize(change_sign(run_ma_qaoa_analytical_p1), next_angles, (graph,))
+                result = optimize.minimize(change_sign(run_ma_qaoa_analytical_p1), next_angles, (graph, edge_list))
             else:
-                result = optimize.minimize(change_sign(run_qaoa_analytical_p1), next_angles, (graph,))
+                result = optimize.minimize(change_sign(run_qaoa_analytical_p1), next_angles, (graph, edge_list))
         else:
             if multi_angle:
-                result = optimize.minimize(change_sign(run_ma_qaoa_simulation), next_angles, (p, all_cuv_vals, neighbours, all_labelings))
+                result = optimize.minimize(change_sign(run_ma_qaoa_simulation), next_angles, (p, all_cuv_vals, neighbours, all_labelings, edge_inds))
             else:
-                result = optimize.minimize(change_sign(run_qaoa_simulation), next_angles, (p, all_cuv_vals, neighbours, all_labelings))
+                result = optimize.minimize(change_sign(run_qaoa_simulation), next_angles, (p, all_cuv_vals, neighbours, all_labelings, edge_inds))
 
         if -result.fun > objective_best:
             objective_best = -result.fun
