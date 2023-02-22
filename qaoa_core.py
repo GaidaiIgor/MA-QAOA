@@ -1,12 +1,15 @@
 import math
+import time
 from typing import Callable, Any
 
 import networkx as nx
-import numpy as np
 import scipy.linalg as linalg
+import scipy.optimize as optimize
 from networkx import Graph
 from numba import njit
-from numpy import ndarray, sin, cos
+from numpy import sin, cos
+
+from preprocessing import *
 
 
 def apply_uc(all_cuv_vals: ndarray, gammas: ndarray, psi: ndarray) -> ndarray:
@@ -204,3 +207,56 @@ def change_sign(func: Callable[[Any, ...], int | float]) -> Callable[[Any, ...],
         return -func(*args, **kwargs)
 
     return func_changed_sign
+
+
+def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph: Graph) -> float:
+    """
+    Runs QAOA angle optimization
+    :param multi_angle: True to use individual angles for each node and edge of the graph (MA-QAOA)
+    :param use_analytical: True to use analytical expression to evaluate expectation value (available for p=1 only)
+    :param p: Number of QAOA layers
+    :param graph: Graph for which MaxCut problem is being solved
+    :return: Maximum expectation value achieved during optimization
+    """
+    optimization_attempts = 10
+    assert not use_analytical or p == 1, "Cannot use analytical for p != 1"
+
+    if not use_analytical:
+        print('Preprocessing...')
+        time_start = time.perf_counter()
+        neighbours = get_neighbour_labelings(len(graph))
+        all_labelings = get_all_binary_labelings(len(graph))
+        all_cuv_vals = np.array([[check_edge_cut(labeling, u, v) for labeling in all_labelings] for (u, v) in graph.edges])
+        time_finish = time.perf_counter()
+        print(f'Preprocessing done. Time elapsed: {time_finish - time_start}')
+
+    print('Optimization...')
+    time_start = time.perf_counter()
+    num_angles_per_layer = len(graph.edges) + len(graph) if multi_angle else 2
+    angles_best = np.zeros(num_angles_per_layer * p)
+    objective_max = sum([w for u, v, w in graph.edges.data('weight')])
+    objective_best = objective_max / 2
+
+    for opt_ind in range(optimization_attempts):
+        if objective_max - objective_best < 1e-3:
+            break
+
+        next_angles = np.random.uniform(-np.pi, np.pi, len(angles_best))
+        if use_analytical:
+            if multi_angle:
+                result = optimize.minimize(change_sign(run_ma_qaoa_analytical_p1), next_angles, (graph,))
+            else:
+                result = optimize.minimize(change_sign(run_qaoa_analytical_p1), next_angles, (graph,))
+        else:
+            if multi_angle:
+                result = optimize.minimize(change_sign(run_ma_qaoa_simulation), next_angles, (p, all_cuv_vals, neighbours, all_labelings))
+            else:
+                result = optimize.minimize(change_sign(run_qaoa_simulation), next_angles, (p, all_cuv_vals, neighbours, all_labelings))
+
+        if -result.fun > objective_best:
+            objective_best = -result.fun
+            angles_best = next_angles / np.pi
+
+    time_finish = time.perf_counter()
+    print(f'Optimization done. Runtime: {time_finish - time_start}')
+    return objective_best
