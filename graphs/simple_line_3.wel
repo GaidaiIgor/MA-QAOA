@@ -1,0 +1,4 @@
+# Simple chain of 3 edges (line)
+0 1 1
+0 2 1
+1 3 1
