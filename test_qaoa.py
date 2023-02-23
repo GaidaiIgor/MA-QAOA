@@ -6,56 +6,137 @@ from src.optimization import optimize_qaoa_angles
 
 class TestQAOAOptimize:
     @pytest.fixture
-    def simple_line_3(self):
-        graph = nx.read_weighted_edgelist('graphs/simple_line_3.wel', nodetype=int)
+    def reg2_sub_3(self):
+        """ Subgraph of a 2-regular graph with 4 nodes and 3 edges """
+        graph = nx.read_weighted_edgelist('graphs/reg2_sub_3.wel', nodetype=int)
         return graph
 
     @pytest.fixture
-    def simple_line_5(self):
-        graph = nx.read_weighted_edgelist('graphs/simple_line_5.wel', nodetype=int)
+    def reg2_4(self):
+        """ 2-regular graph with 4 nodes and 4 edges """
+        graph = nx.read_weighted_edgelist('graphs/reg2_4.wel', nodetype=int)
         return graph
 
     @pytest.fixture
-    def reg3_tree_sub(self):
-        graph = nx.read_weighted_edgelist('graphs/reg3_tree_sub.wel', nodetype=int)
+    def reg2_sub_5(self):
+        """ Subgraph of a 2-regular graph with 6 nodes and 5 edges """
+        graph = nx.read_weighted_edgelist('graphs/reg2_sub_5.wel', nodetype=int)
         return graph
 
     @pytest.fixture
-    def simple_reg3(self):
-        graph = nx.read_weighted_edgelist('graphs/simple_reg3.wel', nodetype=int)
+    def reg2_6(self):
+        """ 2-regular graph with 6 nodes and 6 edges """
+        graph = nx.read_weighted_edgelist('graphs/reg2_6.wel', nodetype=int)
         return graph
+
+    @pytest.fixture
+    def reg3_sub_tree(self):
+        """ Tree-like subgraph of a 3-regular graph with 6 nodes and 5 edges """
+        graph = nx.read_weighted_edgelist('graphs/reg3_sub_tree.wel', nodetype=int)
+        return graph
+
+    @pytest.fixture
+    def reg3_simple(self):
+        """ 3-regular triangle-free graph with 6 nodes and 9 edges """
+        graph = nx.read_weighted_edgelist('graphs/reg3_simple.wel', nodetype=int)
+        return graph
+
+    def test_reg2_sub_3_qaoa_p1(self, reg2_sub_3):
+        """ #1. Tests that QAOA <Cuv> (one edge) on a 2-regular subgraph with 3 edges matches the result reported in Farhi et al. for p=1. """
+        objective_best = optimize_qaoa_angles(False, False, 1, reg2_sub_3, [(0, 1)])
+        assert abs(objective_best - 3/4) < 1e-4
+
+    def test_reg2_sub_3_qaoa_analytical(self, reg2_sub_3):
+        """ #2. Tests that analytical version of QAOA gives the same answer as quantum simulation (compare to #1). """
+        objective_best = optimize_qaoa_angles(False, True, 1, reg2_sub_3, [(0, 1)])
+        assert abs(objective_best - 3/4) < 1e-4
+
+    def test_reg2_4_qaoa_p1(self, reg2_4):
+        """ #3. Tests that QAOA <C> (all edges) on a 2-regular graph with even number of nodes is the same as <Cuv> * number of edges (compare to #2). """
+        objective_best = optimize_qaoa_angles(False, True, 1, reg2_4, None)
+        assert abs(objective_best - 3) < 1e-4
+
+    def test_reg2_sub_3_qaoa_p2(self, reg2_sub_3):
+        """ #4. Tests that <Cuv> grows if p is increased (compare to #1). """
+        objective_best = optimize_qaoa_angles(False, False, 2, reg2_sub_3, [(0, 1)])
+        assert abs(objective_best - 1) < 1e-4
+
+    def test_reg2_sub_5_qaoa_p2(self, reg2_sub_5):
+        """ #5. Tests that QAOA <Cuv> on a 2-regular subgraph with 5 edges matches the result reported in Farhi et al. for p=2. """
+        objective_best = optimize_qaoa_angles(False, False, 2, reg2_sub_5, [(0, 1)])
+        assert abs(objective_best - 5/6) < 1e-4
+
+    def test_reg2_sub_3_maqaoa_p1(self, reg2_sub_3):
+        """ #6. Tests that MA-QAOA is better than regular QAOA on one edge (compare to #1). """
+        objective_best = optimize_qaoa_angles(True, False, 1, reg2_sub_3, [(0, 1)])
+        assert abs(objective_best - 1) < 1e-4
+
+    def test_reg2_sub_3_maqaoa_analytical(self, reg2_sub_3):
+        """ #7. Tests that analytical version of MA-QAOA gives the same answer as quantum simulation (compare to #6). """
+        objective_best = optimize_qaoa_angles(True, True, 1, reg2_sub_3, [(0, 1)])
+        assert abs(objective_best - 1) < 1e-4
+
+    def test_reg2_4_maqaoa_p1(self, reg2_4):
+        """ #8. Tests that MA-QAOA is still the same as regular QAOA on all edges (compare to #3 and #7). """
+        objective_best = optimize_qaoa_angles(True, True, 1, reg2_4, None)
+        assert abs(objective_best - 3) < 1e-4
+
+    def test_reg3_sub_tree_qaoa_p1(self, reg3_sub_tree):
+        """ #9. Tests that QAOA <Cuv> on a 3-regular tree subgraph matches the result reported in Farhi et al. for p=1. """
+        objective_best = optimize_qaoa_angles(False, True, 1, reg3_sub_tree, [(0, 1)])
+        assert abs(objective_best - 0.6924) < 1e-4
+
+    def test_reg3_simple_qaoa_p1(self, reg3_simple):
+        """ #10. Tests that QAOA <C> on a 3-regular graph matches result of #9 * number of edges. """
+        objective_best = optimize_qaoa_angles(False, True, 1, reg3_simple, None)
+        assert abs(objective_best - 6.2321) < 1e-4
+
+    def test_reg3_simple_maqaoa_p1(self, reg3_simple):
+        """ #11. Tests that MA-QAOA <C> on a 3-regular graph is better than the result on regular QAOA (#10). """
+        objective_best = optimize_qaoa_angles(True, True, 1, reg3_simple, None)
+        assert abs(objective_best - 6.5) < 1e-4
+
+    def test_reg3_simple_qaoa_p2(self, reg3_simple):
+        """ #12. Tests that QAOA <C> on a 3-regular graph is better than p=1 (#10), but still less than maximum (=9). """
+        objective_best = optimize_qaoa_angles(False, False, 2, reg3_simple, None)
+        assert abs(objective_best - 8.0198) < 1e-4
+
+    def test_reg3_simple_maqaoa_p2(self, reg3_simple):
+        """ #13. Tests that MA-QAOA <C> on a 3-regular graph is better than p=1 (#11), still better than QAOA (#12) and reaches maximum = 9. """
+        objective_best = optimize_qaoa_angles(True, False, 2, reg3_simple, None)
+        assert abs(objective_best - 9) < 1e-4
 
     @pytest.mark.parametrize("use_analytical", [False, True])
     @pytest.mark.parametrize(("multi_angle", "expected"), [(False, 3/4), (True, 1)])
-    def test_line_3(self, simple_line_3, use_analytical, multi_angle, expected):
-        """ Tests expected values of <C> on one edge on a simple line graph with 3 edges (subgraph of a 2-regular graph for p=1).
-        Tests both classical and multi-angle approach in simulation and analytical mode.
-        Classical QAOA (multi_angle=False) is expected to return 3/4 as known from Farhi et al.
-        Multi-angle is expected to do better than classical, 1 in this case.
+    def test_reg2_sub_3(self, reg2_sub_3, use_analytical, multi_angle, expected):
+        """ Tests expected values of <C> on one edge on a 2-regular subgraph with 3 edges.
+        Tests both original and multi-angle approach in simulation and analytical mode.
+        Original QAOA (multi_angle=False) is expected to return 3/4 as reported in Farhi et al.
+        Multi-angle is expected to do no worse than classical, 1 in this case.
         Analytical modes are expected to return the same answer as quantum simulation. """
-        objective_best = optimize_qaoa_angles(multi_angle, use_analytical, 1, simple_line_3, [(0, 1)])
+        objective_best = optimize_qaoa_angles(multi_angle, use_analytical, 1, reg2_sub_3, [(0, 1)])
         assert abs(objective_best - expected) < 1e-4
 
     @pytest.mark.parametrize(("multi_angle", "expected"), [(False, 5/6), (True, 1)])
-    def test_line_5_simulation_p2(self, simple_line_5, multi_angle, expected):
+    def test_line_5_simulation_p2(self, reg2_sub_5, multi_angle, expected):
         """ Tests expected values of <C> on one edge on a simple line graph with 5 edges (subgraph of a 2-regular graph for p=2).
         Classical QAOA (multi_angle=False) is expected to return 5/6 as known from Farhi et al.
         Multi-angle is expected to do better than classical, 1 in this case.
         Checks that simulation works for p > 1, where no analytical formulas exist. """
-        objective_best = optimize_qaoa_angles(multi_angle, False, 2, simple_line_5, [(0, 1)])
+        objective_best = optimize_qaoa_angles(multi_angle, False, 2, reg2_sub_5, [(0, 1)])
         assert abs(objective_best - expected) < 1e-4
 
     @pytest.mark.parametrize("use_analytical", [False, True])
     @pytest.mark.parametrize(("multi_angle", "expected"), [(False, 0.6924), (True, 1)])
-    def test_reg3_tree_sub(self, reg3_tree_sub, multi_angle, use_analytical, expected):
+    def test_reg3_tree_sub(self, reg3_sub_tree, multi_angle, use_analytical, expected):
         """ Tests expected values of <C> on one edge on a tree-like subgraph of a 3-regular graph (for p=1).
         Classical QAOA (multi_angle=False) is expected to return 0.6924 as known from Farhi et al.
         Multi-angle is expected to do better than classical, 1 in this case. """
-        objective_best = optimize_qaoa_angles(multi_angle, use_analytical, 1, reg3_tree_sub, [(0, 1)])
+        objective_best = optimize_qaoa_angles(multi_angle, use_analytical, 1, reg3_sub_tree, [(0, 1)])
         assert abs(objective_best - expected) < 1e-4
 
     @pytest.mark.parametrize("use_analytical", [False, True])
     @pytest.mark.parametrize(("multi_angle", "expected"), [(False, 6.232), (True, 6.5)])
-    def test_reg3_tree_sub_all_edges(self, multi_angle, use_analytical, simple_reg3, expected):
-        objective_best = optimize_qaoa_angles(multi_angle, use_analytical, 1, simple_reg3)
+    def test_reg3_tree_sub_all_edges(self, multi_angle, use_analytical, reg3_simple, expected):
+        objective_best = optimize_qaoa_angles(multi_angle, use_analytical, 1, reg3_simple)
         assert abs(objective_best - expected) < 1e-3

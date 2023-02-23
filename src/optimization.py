@@ -8,7 +8,7 @@ from networkx import Graph
 
 import src.preprocessing as pr
 from src.analytical import run_ma_qaoa_analytical_p1
-from src.classical_qaoa import run_qaoa_analytical_p1, run_qaoa_simulation
+from src.original_qaoa import run_qaoa_analytical_p1, run_qaoa_simulation
 from src.simulation import run_ma_qaoa_simulation
 
 
@@ -34,7 +34,7 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
     :param edge_list: List of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
     :return: Maximum expectation value achieved during optimization
     """
-    max_no_improvements = 3
+    max_no_improvements = 5
     assert not use_analytical or p == 1, "Cannot use analytical for p != 1"
 
     if not use_analytical:
