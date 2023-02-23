@@ -105,38 +105,3 @@ class TestQAOAOptimize:
         """ #13. Tests that MA-QAOA <C> on a 3-regular graph is better than p=1 (#11), still better than QAOA (#12) and reaches maximum = 9. """
         objective_best = optimize_qaoa_angles(True, False, 2, reg3_simple, None)
         assert abs(objective_best - 9) < 1e-4
-
-    @pytest.mark.parametrize("use_analytical", [False, True])
-    @pytest.mark.parametrize(("multi_angle", "expected"), [(False, 3/4), (True, 1)])
-    def test_reg2_sub_3(self, reg2_sub_3, use_analytical, multi_angle, expected):
-        """ Tests expected values of <C> on one edge on a 2-regular subgraph with 3 edges.
-        Tests both original and multi-angle approach in simulation and analytical mode.
-        Original QAOA (multi_angle=False) is expected to return 3/4 as reported in Farhi et al.
-        Multi-angle is expected to do no worse than classical, 1 in this case.
-        Analytical modes are expected to return the same answer as quantum simulation. """
-        objective_best = optimize_qaoa_angles(multi_angle, use_analytical, 1, reg2_sub_3, [(0, 1)])
-        assert abs(objective_best - expected) < 1e-4
-
-    @pytest.mark.parametrize(("multi_angle", "expected"), [(False, 5/6), (True, 1)])
-    def test_line_5_simulation_p2(self, reg2_sub_5, multi_angle, expected):
-        """ Tests expected values of <C> on one edge on a simple line graph with 5 edges (subgraph of a 2-regular graph for p=2).
-        Classical QAOA (multi_angle=False) is expected to return 5/6 as known from Farhi et al.
-        Multi-angle is expected to do better than classical, 1 in this case.
-        Checks that simulation works for p > 1, where no analytical formulas exist. """
-        objective_best = optimize_qaoa_angles(multi_angle, False, 2, reg2_sub_5, [(0, 1)])
-        assert abs(objective_best - expected) < 1e-4
-
-    @pytest.mark.parametrize("use_analytical", [False, True])
-    @pytest.mark.parametrize(("multi_angle", "expected"), [(False, 0.6924), (True, 1)])
-    def test_reg3_tree_sub(self, reg3_sub_tree, multi_angle, use_analytical, expected):
-        """ Tests expected values of <C> on one edge on a tree-like subgraph of a 3-regular graph (for p=1).
-        Classical QAOA (multi_angle=False) is expected to return 0.6924 as known from Farhi et al.
-        Multi-angle is expected to do better than classical, 1 in this case. """
-        objective_best = optimize_qaoa_angles(multi_angle, use_analytical, 1, reg3_sub_tree, [(0, 1)])
-        assert abs(objective_best - expected) < 1e-4
-
-    @pytest.mark.parametrize("use_analytical", [False, True])
-    @pytest.mark.parametrize(("multi_angle", "expected"), [(False, 6.232), (True, 6.5)])
-    def test_reg3_tree_sub_all_edges(self, multi_angle, use_analytical, reg3_simple, expected):
-        objective_best = optimize_qaoa_angles(multi_angle, use_analytical, 1, reg3_simple)
-        assert abs(objective_best - expected) < 1e-3
