@@ -1,3 +1,6 @@
+"""
+Functions related to optimization of QAOA angles
+"""
 import logging
 import time
 from typing import Callable, Any

@@ -1,5 +1,5 @@
 """
-Functions that provide classical QAOA interface to MA-QAOA entry points (2 angles per layer)
+Functions that provide regular QAOA interface to MA-QAOA entry points (2 angles per layer)
 """
 import numpy as np
 from networkx import Graph

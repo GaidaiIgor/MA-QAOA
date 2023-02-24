@@ -1,3 +1,6 @@
+"""
+QAOA tests
+"""
 import networkx as nx
 import pytest
 
@@ -8,37 +11,37 @@ class TestQAOAOptimize:
     @pytest.fixture
     def reg2_sub_3(self):
         """ Subgraph of a 2-regular graph with 4 nodes and 3 edges """
-        graph = nx.read_weighted_edgelist('graphs/reg2_sub_3.wel', nodetype=int)
+        graph = nx.read_gml('graphs/simple/reg2_n4_sub.gml', destringizer=int)
         return graph
 
     @pytest.fixture
     def reg2_4(self):
         """ 2-regular graph with 4 nodes and 4 edges """
-        graph = nx.read_weighted_edgelist('graphs/reg2_4.wel', nodetype=int)
+        graph = nx.read_gml('graphs/simple/reg2_n4.gml', destringizer=int)
         return graph
 
     @pytest.fixture
     def reg2_sub_5(self):
         """ Subgraph of a 2-regular graph with 6 nodes and 5 edges """
-        graph = nx.read_weighted_edgelist('graphs/reg2_sub_5.wel', nodetype=int)
+        graph = nx.read_gml('graphs/simple/reg2_n6_sub.gml', destringizer=int)
         return graph
 
     @pytest.fixture
     def reg2_6(self):
         """ 2-regular graph with 6 nodes and 6 edges """
-        graph = nx.read_weighted_edgelist('graphs/reg2_6.wel', nodetype=int)
+        graph = nx.read_gml('graphs/simple/reg2_n6.gml', destringizer=int)
         return graph
 
     @pytest.fixture
     def reg3_sub_tree(self):
         """ Tree-like subgraph of a 3-regular graph with 6 nodes and 5 edges """
-        graph = nx.read_weighted_edgelist('graphs/reg3_sub_tree.wel', nodetype=int)
+        graph = nx.read_gml('graphs/simple/reg3_n6_sub.gml', destringizer=int)
         return graph
 
     @pytest.fixture
     def reg3_simple(self):
         """ 3-regular triangle-free graph with 6 nodes and 9 edges """
-        graph = nx.read_weighted_edgelist('graphs/reg3_simple.wel', nodetype=int)
+        graph = nx.read_gml('graphs/simple/reg3_n6.gml', destringizer=int)
         return graph
 
     def test_reg2_sub_3_qaoa_p1(self, reg2_sub_3):
