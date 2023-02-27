@@ -8,6 +8,7 @@ from typing import Callable, Any
 import numpy as np
 import scipy.optimize as optimize
 from networkx import Graph
+from numpy import ndarray
 
 import src.preprocessing as pr
 from src.analytical import run_ma_qaoa_analytical_p1
@@ -27,7 +28,7 @@ def change_sign(func: Callable[[Any, ...], int | float]) -> Callable[[Any, ...],
     return func_changed_sign
 
 
-def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph: Graph, edge_list: list[tuple[int, int]] = None) -> float:
+def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph: Graph, edge_list: list[tuple[int, int]] = None) -> tuple[float, ndarray]:
     """
     Runs QAOA angle optimization
     :param multi_angle: True to use individual angles for each node and edge of the graph (MA-QAOA)
@@ -35,7 +36,7 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
     :param p: Number of QAOA layers
     :param graph: Graph for which MaxCut problem is being solved
     :param edge_list: List of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
-    :return: Maximum expectation value achieved during optimization
+    :return: 1) Maximum expectation value achieved during optimization. 2) Set of angles that result in the returned expectation value
     """
     max_no_improvements = 5
     assert not use_analytical or p == 1, "Cannot use analytical for p != 1"
@@ -74,10 +75,10 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
         if -result.fun > objective_best:
             no_improvement_count = 0
             objective_best = -result.fun
-            angles_best = next_angles / np.pi
+            angles_best = result.x
         else:
             no_improvement_count += 1
 
     time_finish = time.perf_counter()
     logging.debug(f'Optimization done. Runtime: {time_finish - time_start}')
-    return objective_best
+    return objective_best, angles_best
