@@ -6,6 +6,7 @@ from itertools import product
 import bitarray.util as butil
 import numpy as np
 from numpy import ndarray
+from networkx import Graph
 
 
 def get_neighbour_labelings(num_qubits: int) -> ndarray:
@@ -41,3 +42,11 @@ def check_edge_cut(labeling: ndarray, u: int, v: int) -> int:
     :return: 1 if specified edge is between different labels, 0 otherwise
     """
     return 1 if labeling[-u - 1] != labeling[-v - 1] else 0
+
+
+def find_max_cut(graph: Graph) -> tuple[int, int]:
+    all_labelings = get_all_binary_labelings(len(graph))
+    all_cuv_vals = np.array([[check_edge_cut(labeling, u, v) for labeling in all_labelings] for (u, v) in graph.edges])
+    obj_vals = np.sum(all_cuv_vals, 0)
+    max_ind = np.argmax(obj_vals)
+    return obj_vals[max_ind], max_ind
