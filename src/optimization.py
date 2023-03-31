@@ -40,9 +40,10 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
     2) Set of angles that result in the returned expectation value. Format: (gamma_1, ..., gamma_p, beta_1, ..., beta_p)
     """
     max_no_improvements = 5
+    logger = logging.getLogger('QAOA')
 
     if not use_analytical:
-        logging.debug('Preprocessing...')
+        logger.debug('Preprocessing...')
         time_start = time.perf_counter()
         neighbours = pr.get_neighbour_labelings(len(graph))
         all_labelings = pr.get_all_binary_labelings(len(graph))
@@ -50,9 +51,9 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
         all_edge_list = list(graph.edges)
         edge_inds = None if edge_list is None else [all_edge_list.index(edge) for edge in edge_list]
         time_finish = time.perf_counter()
-        logging.debug(f'Preprocessing done. Time elapsed: {time_finish - time_start}')
+        logger.debug(f'Preprocessing done. Time elapsed: {time_finish - time_start}')
 
-    logging.debug('Optimization...')
+    logger.debug('Optimization...')
     time_start = time.perf_counter()
     num_angles_per_layer = len(graph.edges) + len(graph) if multi_angle else 2
     angles_best = np.zeros(num_angles_per_layer * p)
@@ -81,5 +82,5 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
             no_improvement_count += 1
 
     time_finish = time.perf_counter()
-    logging.debug(f'Optimization done. Runtime: {time_finish - time_start}')
+    logger.debug(f'Optimization done. Runtime: {time_finish - time_start}')
     return objective_best, angles_best

@@ -6,6 +6,7 @@ import numpy as np
 import src.plot
 
 from src.optimization import optimize_qaoa_angles
+import logging
 
 from src.original_qaoa import run_qaoa_analytical, run_qaoa_analytical_p1, run_qaoa_simulation
 
@@ -32,4 +33,7 @@ def run_main():
 
 # TODO: starting angles range?
 if __name__ == '__main__':
+    logging.basicConfig()
+    # logger = logging.getLogger('QAOA')
+    # logger.setLevel(logging.DEBUG)
     run_main()
