@@ -12,7 +12,7 @@ from numpy import ndarray
 
 import src.preprocessing as pr
 from src.analytical import run_ma_qaoa_analytical_p1
-from src.original_qaoa import run_qaoa_analytical_p1, run_qaoa_simulation
+from src.original_qaoa import run_qaoa_analytical_p1, run_qaoa_simulation, run_qaoa_analytical
 from src.simulation import run_ma_qaoa_simulation
 
 
@@ -36,10 +36,10 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
     :param p: Number of QAOA layers
     :param graph: Graph for which MaxCut problem is being solved
     :param edge_list: List of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
-    :return: 1) Maximum expectation value achieved during optimization. 2) Set of angles that result in the returned expectation value
+    :return: 1) Maximum expectation value achieved during optimization.
+    2) Set of angles that result in the returned expectation value. Format: (gamma_1, ..., gamma_p, beta_1, ..., beta_p)
     """
     max_no_improvements = 5
-    assert not use_analytical or p == 1, "Cannot use analytical for p != 1"
 
     if not use_analytical:
         logging.debug('Preprocessing...')
@@ -65,7 +65,8 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
             if multi_angle:
                 result = optimize.minimize(change_sign(run_ma_qaoa_analytical_p1), next_angles, (graph, edge_list))
             else:
-                result = optimize.minimize(change_sign(run_qaoa_analytical_p1), next_angles, (graph, edge_list))
+                # result = optimize.minimize(change_sign(run_qaoa_analytical_p1), next_angles, (graph, edge_list))
+                result = optimize.minimize(change_sign(run_qaoa_analytical), next_angles, (p, graph, edge_list))
         else:
             if multi_angle:
                 result = optimize.minimize(change_sign(run_ma_qaoa_simulation), next_angles, (p, all_cuv_vals, neighbours, all_labelings, edge_inds))
