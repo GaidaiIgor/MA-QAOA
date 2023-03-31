@@ -17,7 +17,7 @@ def plot_qaoa_expectation_p1(graph: Graph, edge_list: list[tuple[int, int]] = No
             expectation[i, j] = run_qaoa_analytical_p1(angles, graph, edge_list)
 
     fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-    surf = ax.plot_surface(beta_mesh / np.pi, gamma_mesh / np.pi, expectation / 9, cmap=cm.seismic, vmin=0.25, vmax=0.75, rstride=5, cstride=5)
+    surf = ax.plot_surface(beta_mesh / np.pi, gamma_mesh / np.pi, expectation, cmap=cm.seismic, vmin=0.25, vmax=0.75, rstride=5, cstride=5)
     plt.xlabel('Beta')
     plt.ylabel('Gamma')
     ax.zaxis.set_major_locator(LinearLocator(10))
