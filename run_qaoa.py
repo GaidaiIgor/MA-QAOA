@@ -1,20 +1,19 @@
 """
 Main entry point
 """
-import networkx as nx
-import numpy as np
-import src.plot
-
-from src.optimization import optimize_qaoa_angles
 import logging
 
-from src.original_qaoa import run_qaoa_analytical, run_qaoa_analytical_p1, run_qaoa_simulation
+import networkx as nx
+import numpy as np
+
+import src.plot
+from src.optimization import optimize_qaoa_angles
 
 
 def run_main():
     multi_angle = False
     use_analytical = True
-    p = 2
+    p = 1
     graph = nx.read_gml('graphs/simple/reg3_sub_tree.gml', destringizer=int)
     edge_list = [(0, 1)]
     # edge_list = None
@@ -34,6 +33,6 @@ def run_main():
 # TODO: starting angles range?
 if __name__ == '__main__':
     logging.basicConfig()
-    # logger = logging.getLogger('QAOA')
-    # logger.setLevel(logging.DEBUG)
+    logger = logging.getLogger('QAOA')
+    logger.setLevel(logging.DEBUG)
     run_main()
