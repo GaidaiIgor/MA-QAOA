@@ -1,14 +1,14 @@
 """
 Functions that provide regular QAOA interface to MA-QAOA entry points (2 angles per layer)
 """
+import itertools as it
+
 import numpy as np
 from networkx import Graph
-from numba import njit
 from numpy import ndarray, sin, cos
 
 from src.analytical import run_ma_qaoa_analytical_p1
 from src.simulation import run_ma_qaoa_simulation
-from src.utils import get_all_combinations
 
 
 def convert_angles_qaoa_to_multi_angle(angles: ndarray, num_edges: int, num_nodes: int) -> ndarray:
@@ -53,8 +53,7 @@ def run_qaoa_analytical_p1(angles: ndarray, graph: Graph, edge_list: list[tuple[
     return run_ma_qaoa_analytical_p1(angles_maqaoa, graph, edge_list)
 
 
-@njit
-def find_operator_expectation_gamma(operator: ndarray, angles: ndarray, p: int, all_edges: ndarray) -> complex:
+def find_operator_expectation_gamma(operator: ndarray, angles: ndarray, p: int, all_edges: list[tuple[int, int]]) -> complex:
     """
     Finds expectation of a given Pauli operator after p layers of QAOA. Starts from the gamma layer.
     :param operator: 1D array of ints. Each integer represents a single-qubit Pauli operators. 0 = I, 1 = -X, 2 = -iY, 3 = Z.
@@ -64,28 +63,22 @@ def find_operator_expectation_gamma(operator: ndarray, angles: ndarray, p: int, 
     :return: Expectation value after p layers.
     """
     action_z = np.array([3, 2, 1, 0])
-    valid_edges = np.empty((0, 2), dtype=np.int64)
-    for edge in all_edges:
-        if ((operator[edge[0]] == 1) | (operator[edge[0]] == 2)) ^ ((operator[edge[1]] == 1) | (operator[edge[1]] == 2)):
-            edge = np.ascontiguousarray(edge).reshape((1, -1))
-            valid_edges = np.vstack((valid_edges, edge))
-
-    all_combinations = get_all_combinations(valid_edges)
+    valid_edges = [edge for edge in all_edges if (operator[edge[0]] == 1 or operator[edge[0]] == 2) ^ (operator[edge[1]] == 1 or operator[edge[1]] == 2)]
+    all_combinations = it.chain.from_iterable([it.combinations(valid_edges, n) for n in range(len(valid_edges) + 1)])
     expectation = 0
     for combination in all_combinations:
-        selected_inds = combination.flatten()
+        selected_inds = list(it.chain.from_iterable(combination))
         new_operator = operator.copy()
         for ind in selected_inds:
             new_operator[ind] = action_z[new_operator[ind]]
-        num_1 = combination.shape[0]
+        num_1 = len(combination)
         num_0 = len(valid_edges) - num_1
         expectation_beta = find_operator_expectation_beta(new_operator, angles[1:], p - 1, all_edges)
         expectation += cos(angles[0]) ** num_0 * (-1j * sin(angles[0])) ** num_1 * expectation_beta
     return expectation
 
 
-@njit
-def find_operator_expectation_beta(operator: ndarray, angles: ndarray, p: int, all_edges: ndarray) -> complex:
+def find_operator_expectation_beta(operator: ndarray, angles: ndarray, p: int, all_edges: list[tuple[int, int]]) -> complex:
     """
     Finds expectation of a given Pauli operator after p layers of QAOA. Starts from the beta layer.
     :param operator: 1D array of ints. Each integer represents a single-qubit Pauli operators. 0 = I, 1 = -X, 2 = -iY, 3 = Z.
@@ -101,11 +94,12 @@ def find_operator_expectation_beta(operator: ndarray, angles: ndarray, p: int, a
             return 0
         else:
             num_xs = np.count_nonzero(operator == 1)
-            return complex((-1) ** num_xs)
+            return (-1) ** num_xs
 
-    all_combinations = get_all_combinations(valid_vertices)
+    all_combinations = it.chain.from_iterable([it.combinations(valid_vertices, n) for n in range(len(valid_vertices) + 1)])
     expectation = 0
     for combination in all_combinations:
+        combination = list(combination)
         new_operator = operator.copy()
         new_operator[combination] = action_x[new_operator[combination]]
         num_1 = len(combination)
@@ -127,7 +121,7 @@ def run_qaoa_analytical(angles: ndarray, p: int, graph: Graph, selected_edges: l
     if selected_edges is None:
         selected_edges = list(graph.edges)
 
-    all_edges = np.array(graph.edges, dtype=np.int64)
+    all_edges = list(graph.edges)
     expectation = len(selected_edges) / 2
     angles = angles[::-1]
     for u, v in selected_edges:

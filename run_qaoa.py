@@ -8,18 +8,24 @@ import numpy as np
 
 import src.plot
 from src.optimization import optimize_qaoa_angles
+from src.original_qaoa import run_qaoa_analytical
+import time
 
 
 def run_main():
     multi_angle = False
     use_analytical = True
-    p = 1
+    p = 3
     graph = nx.read_gml('graphs/simple/reg3_sub_tree.gml', destringizer=int)
     edge_list = [(0, 1)]
     # edge_list = None
 
-    # angles = np.array([np.pi / 8, np.pi / 8, np.pi / 8, np.pi / 8])
+    # time_start = time.perf_counter()
+    # angles = np.array([np.pi / 8] * 2 * p)
     # ans1 = run_qaoa_analytical(angles, p, graph, edge_list)
+    # print(ans1)
+    # time_finish = time.perf_counter()
+    # logger.debug(f'Optimization done. Runtime: {time_finish - time_start}')
     # ans2 = run_qaoa_simulation(angles, p, graph, edge_list)
     # print(ans1, ans2)
 
