@@ -12,7 +12,7 @@ from src.optimization import optimize_qaoa_angles
 
 def run_main():
     multi_angle = False
-    use_analytical = True
+    use_analytical = False
     p = 1
     graph = nx.read_gml('graphs/simple/reg3_sub_tree.gml', destringizer=int)
     edge_list = [(0, 1)]
@@ -30,7 +30,6 @@ def run_main():
     # src.plot.plot_qaoa_expectation_p1(graph, edge_list)
 
 
-# TODO: starting angles range?
 if __name__ == '__main__':
     logging.basicConfig()
     logger = logging.getLogger('QAOA')

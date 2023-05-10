@@ -12,7 +12,7 @@ from numpy import ndarray
 
 import src.preprocessing as pr
 from src.analytical import run_ma_qaoa_analytical_p1
-from src.original_qaoa import run_qaoa_analytical_p1, run_qaoa_simulation, run_qaoa_analytical
+from src.original_qaoa import run_qaoa_analytical_p1, run_qaoa_simulation
 from src.simulation import run_ma_qaoa_simulation
 
 
@@ -63,11 +63,11 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
     while no_improvement_count < max_no_improvements:
         next_angles = np.random.uniform(-np.pi, np.pi, len(angles_best))
         if use_analytical:
+            assert p == 1, "Analytical version only exists for p = 1"
             if multi_angle:
                 result = optimize.minimize(change_sign(run_ma_qaoa_analytical_p1), next_angles, (graph, edge_list))
             else:
-                # result = optimize.minimize(change_sign(run_qaoa_analytical_p1), next_angles, (graph, edge_list))
-                result = optimize.minimize(change_sign(run_qaoa_analytical), next_angles, (p, graph, edge_list))
+                result = optimize.minimize(change_sign(run_qaoa_analytical_p1), next_angles, (graph, edge_list))
         else:
             if multi_angle:
                 result = optimize.minimize(change_sign(run_ma_qaoa_simulation), next_angles, (p, all_cuv_vals, neighbours, all_labelings, edge_inds))

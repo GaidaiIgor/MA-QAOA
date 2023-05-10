@@ -76,7 +76,7 @@ class TestQAOAOptimize:
 
     def test_reg2_sub_3_maqaoa_analytical(self, reg2_sub_3):
         """ #7. Tests that analytical version of MA-QAOA gives the same answer as quantum simulation (compare to #6). """
-        objective_best = optimize_qaoa_angles(True, True, 1, reg2_sub_3, [(0, 1)])
+        objective_best = optimize_qaoa_angles(True, True, 1, reg2_sub_3, [(0, 1)])[0]
         assert abs(objective_best - 1) < 1e-4
 
     def test_reg2_4_maqaoa_p1(self, reg2_4):
