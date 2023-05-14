@@ -3,26 +3,9 @@ Functions that calculate auxiliary data structures to speed up quantum simulatio
 """
 from itertools import product
 
-import bitarray.util as butil
 import numpy as np
-from numpy import ndarray
 from networkx import Graph
-
-
-def get_neighbour_labelings(num_qubits: int) -> ndarray:
-    """
-    Computes neighbours of each state on each qubit
-    :param num_qubits: Number of qubits (=nodes in the graph)
-    :return: 2^n x n array where value of element [i, j] = k s.t. k=i with j-th bit flipped (i.e. k is a neighbour of i on j-th bit)
-    """
-    neighbours = np.zeros((2 ** num_qubits, num_qubits), dtype=int)
-    for i in range(neighbours.shape[0]):
-        bits = butil.int2ba(i, length=num_qubits, endian='little')
-        for j in range(neighbours.shape[1]):
-            bits[j] = 1 - bits[j]
-            neighbours[i, j] = butil.ba2int(bits)
-            bits[j] = 1 - bits[j]
-    return neighbours
+from numpy import ndarray
 
 
 def get_all_binary_labelings(num_qubits: int) -> ndarray:
@@ -48,5 +31,5 @@ def find_max_cut(graph: Graph) -> tuple[int, int]:
     all_labelings = get_all_binary_labelings(len(graph))
     all_cuv_vals = np.array([[check_edge_cut(labeling, u, v) for labeling in all_labelings] for (u, v) in graph.edges])
     obj_vals = np.sum(all_cuv_vals, 0)
-    max_ind = np.argmax(obj_vals)
+    max_ind = int(np.argmax(obj_vals))
     return obj_vals[max_ind], max_ind

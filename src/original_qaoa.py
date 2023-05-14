@@ -24,19 +24,18 @@ def convert_angles_qaoa_to_multi_angle(angles: ndarray, num_edges: int, num_node
     return np.array(maqaoa_angles)
 
 
-def run_qaoa_simulation(angles: ndarray, p: int, all_cuv_vals: ndarray, neighbours: ndarray, basis_bin: ndarray, edge_inds: list[int] = None) -> float:
+def run_qaoa_simulation(angles: ndarray, p: int, all_cuv_vals: ndarray, edge_inds: list[int] = None) -> float:
     """
-    Runs regular QAOA by direct simulation of quantum evolution. Dumb and slow, but easy to understand and does not require any additional knowledge.
+    Runs regular QAOA by direct simulation of quantum evolution.
     :param angles: 1D array of all angles for all layers. Format is the same as in run_ma_qaoa_simulation, except there is only one gamma and beta per layer.
     :param p: Number of QAOA layers
     :param all_cuv_vals: 2D array where each row is a diagonal of Cuv operator for each edge in the graph. Size: num_edges x 2^num_nodes
-    :param neighbours: Structure calculated by get_neighbour_labelings
-    :param basis_bin: Structure calculated by get_all_binary_labelings
     :param edge_inds: Indices of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
     :return: Expectation value of C (sum of all Cuv) in the state corresponding to the given set of angles, i.e. <beta, gamma|C|beta, gamma>
     """
-    angles_maqaoa = convert_angles_qaoa_to_multi_angle(angles, all_cuv_vals.shape[0], neighbours.shape[1])
-    return run_ma_qaoa_simulation(angles_maqaoa, p, all_cuv_vals, neighbours, basis_bin, edge_inds)
+    num_qubits = all_cuv_vals.shape[1].bit_length() - 1
+    angles_maqaoa = convert_angles_qaoa_to_multi_angle(angles, all_cuv_vals.shape[0], num_qubits)
+    return run_ma_qaoa_simulation(angles_maqaoa, p, all_cuv_vals, edge_inds)
 
 
 def run_qaoa_analytical_p1(angles: ndarray, graph: Graph, edge_list: list[tuple[int, int]] = None) -> float:

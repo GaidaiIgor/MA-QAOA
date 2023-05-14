@@ -37,15 +37,16 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
     :param graph: Graph for which MaxCut problem is being solved
     :param edge_list: List of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
     :return: 1) Maximum expectation value achieved during optimization.
-    2) Set of angles that result in the returned expectation value. Format: (gamma_1, ..., gamma_p, beta_1, ..., beta_p)
+    2) Set of angles that result in the returned expectation value. Format: angles are specified in the order of application for simulation, i.e.
+    all gammas for 1st layer (in the edge order), then all betas for 1st layer (in the nodes order), then the same format repeats for all other layers.
     """
     max_no_improvements = 5
     logger = logging.getLogger('QAOA')
+    assert not use_analytical or p == 1, "Analytical mode is only available for p = 1"
 
     if not use_analytical:
         logger.debug('Preprocessing...')
         time_start = time.perf_counter()
-        neighbours = pr.get_neighbour_labelings(len(graph))
         all_labelings = pr.get_all_binary_labelings(len(graph))
         all_cuv_vals = np.array([[pr.check_edge_cut(labeling, u, v) for labeling in all_labelings] for (u, v) in graph.edges])
         all_edge_list = list(graph.edges)
@@ -63,16 +64,15 @@ def optimize_qaoa_angles(multi_angle: bool, use_analytical: bool, p: int, graph:
     while no_improvement_count < max_no_improvements:
         next_angles = np.random.uniform(-np.pi, np.pi, len(angles_best))
         if use_analytical:
-            assert p == 1, "Analytical version only exists for p = 1"
             if multi_angle:
                 result = optimize.minimize(change_sign(run_ma_qaoa_analytical_p1), next_angles, (graph, edge_list))
             else:
                 result = optimize.minimize(change_sign(run_qaoa_analytical_p1), next_angles, (graph, edge_list))
         else:
             if multi_angle:
-                result = optimize.minimize(change_sign(run_ma_qaoa_simulation), next_angles, (p, all_cuv_vals, neighbours, all_labelings, edge_inds))
+                result = optimize.minimize(change_sign(run_ma_qaoa_simulation), next_angles, (p, all_cuv_vals, edge_inds))
             else:
-                result = optimize.minimize(change_sign(run_qaoa_simulation), next_angles, (p, all_cuv_vals, neighbours, all_labelings, edge_inds))
+                result = optimize.minimize(change_sign(run_qaoa_simulation), next_angles, (p, all_cuv_vals, edge_inds))
 
         if -result.fun > objective_best:
             no_improvement_count = 0

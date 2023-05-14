@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
-from matplotlib import cm, tri
-from matplotlib.ticker import LinearLocator
 import numpy as np
+from matplotlib import cm
+from matplotlib.ticker import LinearLocator
 from networkx import Graph
+
 from src.original_qaoa import run_qaoa_analytical_p1
 
 
