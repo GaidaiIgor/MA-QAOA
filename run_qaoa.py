@@ -1,5 +1,5 @@
 """
-Main entry point
+Example uses of the library.
 """
 import logging
 import time
@@ -7,9 +7,10 @@ import time
 import networkx as nx
 import numpy as np
 
-import src.preprocessing as pr
 from src.optimization import optimize_qaoa_angles
-from src.original_qaoa import run_qaoa_simulation
+from src.original_qaoa import qaoa_decorator
+from src.preprocessing import preprocess_subgraphs, get_edge_cut
+from src.simulation import calc_expectation_ma_qaoa_simulation, calc_expectation_ma_qaoa_simulation_subgraphs
 
 
 def add_graph():
@@ -40,34 +41,53 @@ def add_graph():
     nx.write_gml(g, 'graphs/simple/reg3_sub_tree_p2.5.gml')
 
 
-def run_point():
+def run_point_subgraphs():
+    graph = nx.read_gml('graphs/simple/reg3_sub_tree_p2.gml', destringizer=int)
     p = 2
-    graph = nx.read_gml('graphs/simple/reg3_sub_tree_p2.5.gml', destringizer=int)
     edge_list = None
     angles = np.array([np.pi / 8] * 2 * p)
 
     time_start = time.perf_counter()
-    all_labelings = pr.get_all_binary_labelings(len(graph))
-    all_cuv_vals = np.array([[pr.check_edge_cut(labeling, u, v) for labeling in all_labelings] for (u, v) in graph.edges])
+    subgraphs = preprocess_subgraphs(graph, p, edge_list)
     time_finish = time.perf_counter()
     logger.debug(f'Preprocessing time: {time_finish - time_start}')
 
     time_start = time.perf_counter()
-    res = run_qaoa_simulation(angles, p, all_cuv_vals, edge_list)
+    qaoa_evaluator = qaoa_decorator(calc_expectation_ma_qaoa_simulation_subgraphs, len(graph.edges), len(graph))
+    res = qaoa_evaluator(angles, p, subgraphs)
+    time_finish = time.perf_counter()
+    logger.debug(f'Expectation value: {res}')
+    logger.debug(f'Evaluation time: {time_finish - time_start}')
+
+
+def run_point():
+    graph = nx.read_gml('graphs/simple/reg3_sub_tree_p2.gml', destringizer=int)
+    p = 2
+    edge_list = None
+    angles = np.array([np.pi / 8] * 2 * p)
+
+    time_start = time.perf_counter()
+    all_cuv_vals = np.array([get_edge_cut(edge, len(graph)) for edge in graph.edges])
+    time_finish = time.perf_counter()
+    logger.debug(f'Preprocessing time: {time_finish - time_start}')
+
+    time_start = time.perf_counter()
+    qaoa_evaluator = qaoa_decorator(calc_expectation_ma_qaoa_simulation, len(graph.edges), len(graph))
+    res = qaoa_evaluator(angles, p, all_cuv_vals, edge_list)
     time_finish = time.perf_counter()
     logger.debug(f'Expectation value: {res}')
     logger.debug(f'Evaluation time: {time_finish - time_start}')
 
 
 def run_optimization():
-    multi_angle = False
-    p = 2
-    graph = nx.read_gml('graphs/simple/reg3_sub_tree_p2.gml', destringizer=int)
+    graph = nx.read_gml('graphs/simple/reg3_sub_tree_p3.gml', destringizer=int)
+    p = 1
     edge_list = None
+    use_multi_angle = False
+    use_analytical = False
+    use_subgraphs = True
 
-    use_analytical = p == 1
-
-    objective_best, angles_best = optimize_qaoa_angles(multi_angle, use_analytical, p, graph, edge_list)
+    objective_best, angles_best = optimize_qaoa_angles(use_multi_angle, use_analytical, use_subgraphs, p, graph, edge_list)
     print(f'Best achieved objective: {objective_best}')
     print(f'Maximizing angles: {angles_best / np.pi}')
 
@@ -77,5 +97,6 @@ if __name__ == '__main__':
     logger = logging.getLogger('QAOA')
     logger.setLevel(logging.DEBUG)
     # add_graph()
-    run_point()
-    # run_optimization()
+    # run_point()
+    # run_point_subgraphs()
+    run_optimization()

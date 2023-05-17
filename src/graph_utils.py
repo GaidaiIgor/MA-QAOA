@@ -1,10 +1,48 @@
 """
-Functions that read/write custom file formats.
+Graph utilities.
 """
 import networkx as nx
 import numpy as np
 from networkx import Graph
 from numpy import ndarray
+from queue import SimpleQueue
+
+
+def find_edge_index(graph: Graph, edge: tuple[int, int]) -> int:
+    """
+    Finds the index of specified edge in graph.edges view or -1 if the edge is not found. Does not take into account nodes order of the edge.
+    :param graph: Graph for search.
+    :param edge: Edge being searched.
+    :return: Index of the edge in graph.edges.
+    """
+    ind = -1
+    for ind, e in enumerate(graph.edges):
+        if edge == e or edge == e[-1::-1]:
+            return ind
+    return ind
+
+
+def get_p_subgraph(graph: Graph, edge: tuple[int, int], p: int) -> Graph:
+    """
+    Returns subgraph that consists from edges within distance p from the source edge via depth-limited edge BFS.
+    Graph elements outside of this subgraph do not matter for calculation of edge p-expectation.
+    :param graph: Original graph.
+    :param edge: Inducing edge.
+    :param p: Number of QAOA layers.
+    :return: Induced subgraph.
+    """
+    edge_queue = SimpleQueue()
+    edge_queue.put((edge, 0))
+    edges_found = {edge}
+    while not edge_queue.empty():
+        next_edge, distance = edge_queue.get()
+        if distance < p:
+            incident_edges = graph.edges(next_edge)
+            for incident in incident_edges:
+                if incident not in edges_found:
+                    edge_queue.put((incident, distance + 1))
+                    edges_found.add(incident)
+    return graph.edge_subgraph(edges_found)
 
 
 def ragged_list_to_numpy_matrix(ragged: list[list[int]]) -> ndarray:

@@ -1,5 +1,5 @@
 """
-Functions that provide analytical formulas for evaluation of the expectation values in QAOA
+Functions that provide analytical formulas for evaluation of the expectation values in QAOA.
 """
 import math
 
@@ -8,9 +8,9 @@ from networkx import Graph
 from numpy import ndarray, sin, cos
 
 
-def run_ma_qaoa_analytical_p1(angles: ndarray, graph: Graph, edge_list: list[tuple[int, int]] = None) -> float:
+def calc_expectation_ma_qaoa_analytical_p1(angles: ndarray, graph: Graph, edge_list: list[tuple[int, int]] = None) -> float:
     """
-    Runs MA-QAOA by evaluating an analytical formula for <Cuv> for all edges when p=1
+    Calculates objective expectation for given angles with MA-QAOA ansatz via an analytical formula for p=1.
     The formula is taken from Vijendran, V., Das, A., Koh, D. E., Assad, S. M. & Lam, P. K. An Expressive Ansatz for Low-Depth Quantum Optimisation. (2023)
     :param angles: 1D array of all angles for the first layer. Same format as in run_ma_qaoa_simulation.
     :param graph: Graph for which MaxCut problem is being solved

@@ -2,11 +2,7 @@
 Functions that provide regular QAOA interface to MA-QAOA entry points (2 angles per layer)
 """
 import numpy as np
-from networkx import Graph
 from numpy import ndarray
-
-from src.analytical import run_ma_qaoa_analytical_p1
-from src.simulation import run_ma_qaoa_simulation
 
 
 def convert_angles_qaoa_to_multi_angle(angles: ndarray, num_edges: int, num_nodes: int) -> ndarray:
@@ -24,27 +20,15 @@ def convert_angles_qaoa_to_multi_angle(angles: ndarray, num_edges: int, num_node
     return np.array(maqaoa_angles)
 
 
-def run_qaoa_simulation(angles: ndarray, p: int, all_cuv_vals: ndarray, edge_inds: list[int] = None) -> float:
+def qaoa_decorator(ma_qaoa_func: callable, num_edges: int, num_nodes: int):
     """
-    Runs regular QAOA by direct simulation of quantum evolution.
-    :param angles: 1D array of all angles for all layers. Format is the same as in run_ma_qaoa_simulation, except there is only one gamma and beta per layer.
-    :param p: Number of QAOA layers
-    :param all_cuv_vals: 2D array where each row is a diagonal of Cuv operator for each edge in the graph. Size: num_edges x 2^num_nodes
-    :param edge_inds: Indices of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
-    :return: Expectation value of C (sum of all Cuv) in the state corresponding to the given set of angles, i.e. <beta, gamma|C|beta, gamma>
+    Duplicates standard QAOA angles to match MA-QAOA format and executes given function that can evaluate target expectation in MA-QAOA ansatz.
+    :param ma_qaoa_func: Function that evaluates target expectation in MA-QAOA ansatz.
+    :param num_edges: Number of edges in the graph.
+    :param num_nodes: Number of nodes in the graph.
+    :return: Result of ma_qaoa_func.
     """
-    num_qubits = all_cuv_vals.shape[1].bit_length() - 1
-    angles_maqaoa = convert_angles_qaoa_to_multi_angle(angles, all_cuv_vals.shape[0], num_qubits)
-    return run_ma_qaoa_simulation(angles_maqaoa, p, all_cuv_vals, edge_inds)
-
-
-def run_qaoa_analytical_p1(angles: ndarray, graph: Graph, edge_list: list[tuple[int, int]] = None) -> float:
-    """
-    Runs regular QAOA. All betas and gammas are forced to be the same.
-    :param angles: 1D array of all angles for the first layer. Same format as in run_qaoa_simulation.
-    :param graph: Graph for which MaxCut problem is being solved
-    :param edge_list: List of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
-    :return: Expectation value of C (sum of all Cuv) in the state corresponding to the given set of angles, i.e. <beta, gamma|C|beta, gamma>
-    """
-    angles_maqaoa = convert_angles_qaoa_to_multi_angle(angles, len(graph.edges), len(graph))
-    return run_ma_qaoa_analytical_p1(angles_maqaoa, graph, edge_list)
+    def qaoa_wrapped(*args, **kwargs):
+        angles_maqaoa = convert_angles_qaoa_to_multi_angle(args[0], num_edges, num_nodes)
+        return ma_qaoa_func(angles_maqaoa, *args[1:], **kwargs)
+    return qaoa_wrapped
