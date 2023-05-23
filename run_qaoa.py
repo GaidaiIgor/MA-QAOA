@@ -1,93 +1,74 @@
 """
 Example uses of the library.
 """
+import itertools as it
 import logging
 import time
 
 import networkx as nx
 import numpy as np
 
-from src.optimization import optimize_qaoa_angles
-from src.original_qaoa import qaoa_decorator
-from src.preprocessing import preprocess_subgraphs, get_edge_cut
-from src.simulation import calc_expectation_ma_qaoa_simulation, calc_expectation_ma_qaoa_simulation_subgraphs
+from src.graph_utils import get_index_edge_list
+from src.optimization import optimize_qaoa_angles, Evaluator
+from src.preprocessing import evaluate_graph_cut, evaluate_z_term
 
 
 def add_graph():
     g = nx.Graph()
     g.add_edge(0, 1, weight=1)
     g.add_edge(0, 2, weight=1)
-    g.add_edge(0, 3, weight=1)
-    g.add_edge(1, 4, weight=1)
+    g.add_edge(0, 4, weight=1)
+    g.add_edge(0, 6, weight=1)
+    g.add_edge(0, 7, weight=1)
+    g.add_edge(1, 2, weight=1)
+    g.add_edge(1, 3, weight=1)
     g.add_edge(1, 5, weight=1)
+    g.add_edge(1, 7, weight=1)
+    g.add_edge(2, 3, weight=1)
+    g.add_edge(2, 4, weight=1)
     g.add_edge(2, 6, weight=1)
-    g.add_edge(2, 7, weight=1)
-    g.add_edge(3, 8, weight=1)
-    g.add_edge(3, 9, weight=1)
-    g.add_edge(4, 10, weight=1)
-    g.add_edge(4, 11, weight=1)
-    g.add_edge(5, 12, weight=1)
-    g.add_edge(5, 13, weight=1)
-    g.add_edge(6, 14, weight=1)
-    g.add_edge(6, 15, weight=1)
-    g.add_edge(7, 16, weight=1)
-    g.add_edge(7, 17, weight=1)
-    g.add_edge(8, 18, weight=1)
-    g.add_edge(8, 19, weight=1)
-    g.add_edge(9, 20, weight=1)
-    g.add_edge(9, 21, weight=1)
+    g.add_edge(3, 4, weight=1)
+    g.add_edge(3, 5, weight=1)
+    g.add_edge(3, 7, weight=1)
+    g.add_edge(4, 5, weight=1)
+    g.add_edge(4, 6, weight=1)
+    g.add_edge(5, 6, weight=1)
+    g.add_edge(5, 7, weight=1)
+    g.add_edge(6, 7, weight=1)
 
-    g.graph['max_cut'] = 21
-    nx.write_gml(g, 'graphs/simple/reg3_sub_tree_p2.5.gml')
-
-
-def run_point_subgraphs():
-    graph = nx.read_gml('graphs/simple/reg3_sub_tree_p2.gml', destringizer=int)
-    p = 2
-    edge_list = None
-    angles = np.array([np.pi / 8] * 2 * p)
-
-    time_start = time.perf_counter()
-    subgraphs = preprocess_subgraphs(graph, p, edge_list)
-    time_finish = time.perf_counter()
-    logger.debug(f'Preprocessing time: {time_finish - time_start}')
-
-    time_start = time.perf_counter()
-    qaoa_evaluator = qaoa_decorator(calc_expectation_ma_qaoa_simulation_subgraphs, len(graph.edges), len(graph))
-    res = qaoa_evaluator(angles, p, subgraphs)
-    time_finish = time.perf_counter()
-    logger.debug(f'Expectation value: {res}')
-    logger.debug(f'Evaluation time: {time_finish - time_start}')
+    cut_vals = evaluate_graph_cut(g)
+    g.graph['max_cut'] = int(max(cut_vals))
+    nx.write_gml(g, 'graphs/simple/reg5_n8_e20.gml')
 
 
 def run_point():
     graph = nx.read_gml('graphs/simple/reg3_sub_tree_p2.gml', destringizer=int)
     p = 2
-    edge_list = None
     angles = np.array([np.pi / 8] * 2 * p)
 
+    logger.debug('Preprocessing started...')
     time_start = time.perf_counter()
-    all_cuv_vals = np.array([get_edge_cut(edge, len(graph)) for edge in graph.edges])
+    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=False)
     time_finish = time.perf_counter()
-    logger.debug(f'Preprocessing time: {time_finish - time_start}')
+    logger.debug(f'Preprocessing finished. Time elapsed: {time_finish - time_start}')
 
+    logger.debug('Evaluation started...')
     time_start = time.perf_counter()
-    qaoa_evaluator = qaoa_decorator(calc_expectation_ma_qaoa_simulation, len(graph.edges), len(graph))
-    res = qaoa_evaluator(angles, p, all_cuv_vals, edge_list)
+    res = evaluator.func(angles)
     time_finish = time.perf_counter()
-    logger.debug(f'Expectation value: {res}')
-    logger.debug(f'Evaluation time: {time_finish - time_start}')
+    logger.debug(f'Evaluation finished. Expectation value: {-res}. Time elapsed: {time_finish - time_start}')
 
 
 def run_optimization():
-    graph = nx.read_gml('graphs/simple/reg3_sub_tree_p3.gml', destringizer=int)
+    graph = nx.read_gml('graphs/simple/reg3_sub_tree.gml', destringizer=int)
     p = 1
-    edge_list = None
-    use_multi_angle = False
-    use_analytical = False
-    use_subgraphs = True
+    target_vals = evaluate_graph_cut(graph)
+    # driver_term_vals = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
+    driver_term_vals = np.array([evaluate_z_term(term, len(graph)) for term in it.combinations(range(len(graph)), 2)])
+    use_multi_angle = True
 
-    objective_best, angles_best = optimize_qaoa_angles(use_multi_angle, use_analytical, use_subgraphs, p, graph, edge_list)
+    evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, use_multi_angle)
+    objective_best, angles_best = optimize_qaoa_angles(evaluator)
     print(f'Best achieved objective: {objective_best}')
     print(f'Maximizing angles: {angles_best / np.pi}')
 
@@ -98,5 +79,4 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     # add_graph()
     # run_point()
-    # run_point_subgraphs()
     run_optimization()

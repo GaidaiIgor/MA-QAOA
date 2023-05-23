@@ -1,5 +1,5 @@
 """
-Functions that evaluate expectation values in QAOA directly through quantum simulation
+Functions that evaluate expectation values in QAOA directly through quantum simulation.
 """
 import numpy as np
 import scipy.linalg as linalg
@@ -10,25 +10,25 @@ from src.preprocessing import PSubgraph
 
 
 @njit
-def apply_uc(all_cut_vals: ndarray, gammas: ndarray, psi: ndarray) -> ndarray:
+def apply_driver(term_angles: ndarray, term_vals: ndarray, psi: ndarray) -> ndarray:
     """
-    Applies Uc unitary to a given state psi.
-    :param all_cut_vals: 2D array where each row is a diagonal of Cuv operator for each edge in the graph.
-    :param gammas: 1D array with the values of gamma for each edge.
+    Applies exponent of the driver function with given angles to a given state psi.
+    :param term_angles: 1D array with the angles for each term.
+    :param term_vals: 2D array of size #terms x 2 ** #qubits. Each row is an array of values of a term in Z-expansion of the driver function for each computational basis.
     :param psi: Current quantum state vector.
     :return: New quantum state vector.
     """
-    for i in range(len(gammas)):
-        psi = np.exp(-1j * gammas[i] * all_cut_vals[i, :]) * psi
+    for i in range(len(term_angles)):
+        psi = np.exp(-1j * term_angles[i] * term_vals[i, :]) * psi
     return psi
 
 
 @njit
 def get_exp_x(beta: float) -> ndarray:
     """
-    Returns Ub matrix for 1 qubit.
+    Returns mixer matrix for 1 qubit.
     :param beta: Rotation angle.
-    :return: Ub matrix for 1 qubit, i.e. exp(-i*beta*X).
+    :return: Mixer matrix for 1 qubit, i.e. exp(-i*beta*X).
     """
     return np.array([[cos(beta), -1j * sin(beta)],
                      [-1j * sin(beta), cos(beta)]])
@@ -55,9 +55,9 @@ def apply_unitary_one_qubit(unitary: ndarray, psi: ndarray, bit_ind: int, num_bi
 
 
 @njit
-def apply_ub_individual(betas: ndarray, psi: ndarray) -> ndarray:
+def apply_mixer_individual(betas: ndarray, psi: ndarray) -> ndarray:
     """
-    Applies Ub unitary to a given state psi. Does not explicitly create Ub matrix. Instead, applies single-qubit unitaries to each qubit independently.
+    Applies mixer unitary to a given state psi. Does not explicitly create the mixer matrix. Instead, applies single-qubit unitaries to each qubit independently.
     :param betas: 1D array with rotation angles for each qubit. Size: number of qubits.
     :param psi: Current quantum state vector.
     :return: New quantum state vector.
@@ -68,6 +68,7 @@ def apply_ub_individual(betas: ndarray, psi: ndarray) -> ndarray:
     return psi
 
 
+@njit
 def calc_expectation_diagonal(psi: ndarray, diagonal_vals: ndarray) -> float:
     """
     Calculates expectation value of a given diagonal operator for a given state psi.
@@ -78,53 +79,50 @@ def calc_expectation_diagonal(psi: ndarray, diagonal_vals: ndarray) -> float:
     return np.real(np.vdot(psi, diagonal_vals * psi))
 
 
-def calc_expectation_ma_qaoa_simulation_subgraphs(angles: ndarray, p: int, subgraphs: list[PSubgraph]) -> float:
+def calc_expectation_ma_qaoa_simulation_subgraphs(angles: ndarray, subgraphs: list[PSubgraph], p: int) -> float:
     """
     Calculates objective expectation for given angles with MA-QAOA ansatz by separate simulation of each p-subgraph.
     :param angles: 1D array of all angles for all layers. Format: Angles are specified in the order of application, i.e.
     all gammas for 1st layer (in the edge order), then all betas for 1st layer (in the nodes order), then the same format repeats for all other layers.
-    :param p: Number of QAOA layers.
     :param subgraphs: List of p-subgraphs corresponding to each edge in the graph.
+    :param p: Number of QAOA layers.
     :return: Expectation value of target function in the state corresponding to the given set of angles, i.e. <beta, gamma|C|beta, gamma>.
     """
-    num_angles_per_layer = int(len(angles) / p)
+    num_angles_per_layer = len(angles) // p
     expectation = 0
     for subgraph in subgraphs:
         subgraph_angles = []
         for i in range(p):
             subgraph_angles.extend(angles[subgraph.angle_map + i * num_angles_per_layer])
         subgraph_angles = np.array(subgraph_angles)
-        expectation += calc_expectation_ma_qaoa_simulation(subgraph_angles, p, subgraph.cut_vals, subgraph.edge_inds)
+        expectation += calc_expectation_general_qaoa(subgraph_angles, subgraph.cut_vals[subgraph.edge_ind, :], subgraph.cut_vals, p)
     return expectation
 
 
-def calc_expectation_ma_qaoa_simulation(angles: ndarray, p: int, all_cut_vals: ndarray, edge_inds: ndarray = None) -> float:
+def calc_expectation_general_qaoa(angles: ndarray, target_vals: ndarray, driver_term_vals: ndarray, p: int) -> float:
     """
-    Calculates objective expectation for given angles with MA-QAOA ansatz by simulation of quantum evolution.
-    :param angles: 1D array of all angles for all layers. Format: Angles are specified in the order of application, i.e.
-    all gammas for 1st layer (in the edge order), then all betas for 1st layer (in the nodes order), then the same format repeats for all other layers.
+    Calculates target function expectation value for given set of driver terms and corresponding weights.
+    :param angles: 1D array of angles for all layers. Format: first, term angles for 1st layer in the same order as rows of driver_term_vals,
+    then mixer angles for 1st layer in the qubits order, then the same format repeats for other layers.
+    :param target_vals: 1D array of target function values for all computational basis states.
+    :param driver_term_vals: 2D array of size #terms x 2 ** #qubits. Each row is an array of values of a driver function's term for each computational basis.
     :param p: Number of QAOA layers.
-    :param all_cut_vals: 2D array where each row is a diagonal of Cuv operator for each edge in the graph. Size: num_edges x 2^num_nodes.
-    :param edge_inds: 1D array of indices of edges that should be considered when calculating expectation value. If None, then all edges are considered.
-    :return: Expectation value of C (sum of all Cuv) in the state corresponding to the given set of angles, i.e. <beta, gamma|C|beta, gamma>.
+    :return: Expectation value of the target function in the state corresponding to the given parameters and terms.
     """
-    if edge_inds is None:
-        edge_inds = list(range(all_cut_vals.shape[0]))
-
-    psi = np.ones(all_cut_vals.shape[1], dtype=np.complex128) / np.sqrt(all_cut_vals.shape[1])
-    num_angles_per_layer = int(len(angles) / p)
+    psi = np.ones(driver_term_vals.shape[1], dtype=np.complex128) / np.sqrt(driver_term_vals.shape[1])
+    num_params_per_layer = len(angles) // p
     for i in range(p):
-        layer_angles = angles[i * num_angles_per_layer:(i + 1) * num_angles_per_layer]
-        gammas = layer_angles[:all_cut_vals.shape[0]]
-        psi = apply_uc(all_cut_vals, gammas, psi)
-        betas = layer_angles[all_cut_vals.shape[0]:]
-        psi = apply_ub_individual(betas, psi)
-    return calc_expectation_diagonal(psi, np.sum(all_cut_vals[edge_inds, :], 0))
+        layer_params = angles[i * num_params_per_layer:(i + 1) * num_params_per_layer]
+        gammas = layer_params[:driver_term_vals.shape[0]]
+        psi = apply_driver(gammas, driver_term_vals, psi)
+        betas = layer_params[driver_term_vals.shape[0]:]
+        psi = apply_mixer_individual(betas, psi)
+    return calc_expectation_diagonal(psi, target_vals)
 
 
-def apply_ub_explicit(betas: ndarray, psi: ndarray) -> ndarray:
+def apply_mixer_explicit(betas: ndarray, psi: ndarray) -> ndarray:
     """
-    Applies Ub unitary to a given state psi. Explicitly creates Ub matrix as a sum of tensor products.
+    Applies mixer unitary to a given state psi. Explicitly creates mixer matrix as a sum of tensor products.
     :param betas: 1D array with rotation angles for each qubit.
     :param psi: Current quantum state vector.
     :return: New quantum state vector.

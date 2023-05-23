@@ -9,7 +9,7 @@ from numba import njit
 from numpy import ndarray
 import networkx as nx
 
-from src.graph_utils import get_p_subgraph, find_edge_index
+from src.graph_utils import get_p_subgraph, find_edge_index, get_index_edge_list
 
 
 @dataclass
@@ -17,33 +17,66 @@ class PSubgraph:
     """
     A class that represents edge-induced p-subgraph for QAOA.
     :var graph: Subgraph itself.
-    :var cut_vals: 2D array of size num_edges x 2 ** num_nodes with cut values for each edge in each node labeling.
-    :var edge_inds: 1D array of indices for edges that should be taken into account when calculating expectation.
+    :var cut_vals: 2D array of size num_edges x 2 ** num_nodes with cut values for each edge in each computational basis.
+    :var edge_ind: Index of edge that induced this subgraph in subgraph's edge list.
     :var angle_map: 1D array of indices for overall angles that pertain to this subgraph.
     """
     graph: Graph
     cut_vals: ndarray
-    edge_inds: ndarray
+    edge_ind: int
     angle_map: ndarray
 
 
 @njit
-def get_edge_cut(edge: tuple[int, int], num_nodes: int) -> ndarray:
+def evaluate_z_term(term: ndarray, num_qubits: int) -> ndarray:
     """
-    Returns edge cut values for all binary labelings.
-    :param edge: Edge whose cut is being considered.
+    Evaluates a given Z-term of Pauli Z expansion in the computational basis with given number of qubits.
+    :param term: Term to evaluate, specified as a 1D array of indices on which Z operators act in big endian format.
+    :param num_qubits: Total number of qubits in the system.
+    :return: 1D array of size 2 ** num_qubits with the values of the given Z-term in the computational basis.
+    """
+    term_values = np.zeros(2 ** num_qubits, dtype=np.int8)
+    for i in range(len(term_values)):
+        bin_vals = [i >> num_qubits - bit_ind - 1 & 1 for bit_ind in term]
+        term_values[i] = (-1) ** sum(bin_vals)
+    return term_values
+
+
+@njit
+def evaluate_edge_cut(edge: ndarray, num_nodes: int) -> ndarray:
+    """
+    Evaluates edge cut function for all computational basis states.
+    :param edge: edge, specified as a 1D array with 2 indices of the corresponding nodes.
     :param num_nodes: Total number of nodes in the graph.
-    :return: 1D array of size 2 ** num_nodes, where each element corresponds to a binary labeling (in lexicographical order) separating the nodes of the graph
-    into 2 disjoint sets, and is equal to 1 if the considered edge is between the sets of a given labeling and 0 otherwise.
+    :return: 1D array of size 2 ** num_nodes with 1 if the given edge is cut in the corresponding basis or 0 otherwise.
     """
-    edge_cut = np.zeros(2 ** num_nodes, dtype=np.int32)
-    ind_u_right = num_nodes - edge[0] - 1
-    ind_v_right = num_nodes - edge[1] - 1
-    for i in range(len(edge_cut)):
-        bit_u = i >> ind_u_right & 1
-        bit_v = i >> ind_v_right & 1
-        edge_cut[i] = bit_u ^ bit_v
-    return edge_cut
+    z_term = evaluate_z_term(edge, num_nodes)
+    return (1 - z_term) // 2
+
+
+@njit
+def evaluate_graph_cut_index_edge(index_edge_list: ndarray, num_nodes: int) -> ndarray:
+    """
+    Evaluates sum of edge cuts for all specified edges.
+    :param index_edge_list: 2D array of size num_edges x 2. Each row is an edge specified by indices of nodes in graph.nodes.
+    :param num_nodes: Total number of nodes in the graph.
+    :return: 1D array of size 2 ** num_nodes with the cut values for each computational basis.
+    """
+    res = np.zeros(2 ** num_nodes, dtype=np.int32)
+    for edge in index_edge_list:
+        res += evaluate_edge_cut(edge, num_nodes)
+    return res
+
+
+def evaluate_graph_cut(graph: Graph, edge_list: list[tuple[int, int]] = None) -> ndarray:
+    """
+    Evaluates sum of edge cuts for all specified edges.
+    :param graph: Graph for evaluation.
+    :param edge_list: List of edges that should be taken into account. If None, then all edges are taken into account.
+    :return: 1D array of size 2 ** num_nodes with the cut values for each computational basis.
+    """
+    index_edge_list = get_index_edge_list(graph, edge_list)
+    return evaluate_graph_cut_index_edge(index_edge_list, len(graph))
 
 
 def preprocess_subgraphs(graph: Graph, p: int, edge_list: list[tuple[int, int]] = None) -> list[PSubgraph]:
@@ -62,9 +95,8 @@ def preprocess_subgraphs(graph: Graph, p: int, edge_list: list[tuple[int, int]] 
     subgraphs = []
     for edge in edge_list:
         next_subgraph = get_p_subgraph(graph, edge, p)
-        subgraph_node_indices = {node: ind for ind, node in enumerate(next_subgraph.nodes)}
-        cut_vals = np.array([get_edge_cut((subgraph_node_indices[u], subgraph_node_indices[v]), len(next_subgraph)) for u, v in next_subgraph.edges])
-        edge_inds = np.array([find_edge_index(next_subgraph, edge)])
+        cut_vals = np.array([evaluate_edge_cut(edge, len(next_subgraph)) for edge in get_index_edge_list(next_subgraph)])
+        edge_ind = find_edge_index(next_subgraph, edge)
 
         angle_map = []
         for u, v, ind in next_subgraph.edges.data('index'):
@@ -73,12 +105,5 @@ def preprocess_subgraphs(graph: Graph, p: int, edge_list: list[tuple[int, int]] 
             angle_map.append(ind + graph.number_of_edges())
         angle_map = np.array(angle_map)
 
-        subgraphs.append(PSubgraph(next_subgraph, cut_vals, edge_inds, angle_map))
+        subgraphs.append(PSubgraph(next_subgraph, cut_vals, edge_ind, angle_map))
     return subgraphs
-
-
-def find_max_cut(graph: Graph) -> tuple[int, int]:
-    all_cuv_vals = np.array([get_edge_cut(edge, len(graph)) for edge in graph.edges])
-    obj_vals = np.sum(all_cuv_vals, 0)
-    max_ind = int(np.argmax(obj_vals))
-    return obj_vals[max_ind], max_ind
