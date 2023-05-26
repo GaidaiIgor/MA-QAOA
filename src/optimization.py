@@ -16,8 +16,8 @@ from numpy import ndarray
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1
 from src.graph_utils import get_index_edge_list
 from src.original_qaoa import qaoa_decorator
-from src.preprocessing import evaluate_graph_cut, preprocess_subgraphs, evaluate_edge_cut
-from src.simulation import calc_expectation_general_qaoa, calc_expectation_ma_qaoa_simulation_subgraphs
+from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
+from src.simulation import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
 
 
 @dataclass
@@ -63,29 +63,46 @@ class Evaluator:
         of graph.nodes. Then the format repeats for the remaining p - 1 layers.
         """
         target_vals = evaluate_graph_cut(graph, edge_list)
-        driver_term_vals = np.array([evaluate_edge_cut(edge, len(graph)) for edge in get_index_edge_list(graph)])
+        driver_term_vals = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
         return Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, use_multi_angle)
+
+    @staticmethod
+    def get_evaluator_general_subsets(num_qubits: int, target_terms: list[set[int]], target_coeffs: list[float], driver_terms: list[set[int]], p: int,
+                                      use_multi_angle: bool = True) -> Evaluator:
+        """
+        Returns general evaluator that evaluates by separation into subsets corresponding to each target term.
+        :param num_qubits: Total number of qubits in the problem.
+        :param target_terms: Indices of qubits of each term in Z-expansion of the target function.
+        :param target_coeffs: List of size len(subsets) + 1 with multiplier coefficients for each subset given in the same order. The last extra coefficient is a shift.
+        :param driver_terms: Indices of qubits of each term in Z-expansion of the driver function.
+        :param p: Number of QAOA layers.
+        :param use_multi_angle: True for normal MA-QAOA. False for regular QAOA ansatz where each term and node angle is forced to be the same.
+        :return: Evaluator that accepts 1D array of angles and returns the corresponding target expectation value. The order of angles is the same as in `get_evaluator_general`.
+        """
+        subsets = [PSubset.create(num_qubits, inducing_term, driver_terms, p) for inducing_term in target_terms]
+        func = lambda angles: calc_expectation_general_qaoa_subsets(angles, subsets, target_coeffs, p)
+
+        if use_multi_angle:
+            num_angles = (len(driver_terms) + num_qubits) * p
+        else:
+            func = qaoa_decorator(func, len(driver_terms), num_qubits)
+            num_angles = 2 * p
+        return Evaluator(change_sign(func), num_angles)
 
     @staticmethod
     def get_evaluator_standard_maxcut_subgraphs(graph: Graph, p: int, edge_list: list[tuple[int, int]] = None, use_multi_angle: bool = True) -> Evaluator:
         """
-        Returns evaluator of standard target expectation calculated through simulation of individual subgraphs.
-        This might be faster than simulation of the whole graph if average vertex degree is much smaller than the total number of nodes.
+        Returns an instance of general subset evaluator where the target function is the cut function and the driver function includes the existing edge terms only.
         :param graph: Target graph for MaxCut.
         :param p: Number of QAOA layers.
         :param edge_list: List of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
         :param use_multi_angle: True to use individual angles for each edge and node. False to use 1 angle for all edges and 1 angle for all nodes.
-        :return: Simulation evaluator. The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
+        :return: Simulation subgraph evaluator. The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
         """
-        subgraphs = preprocess_subgraphs(graph, p, edge_list)
-        func = lambda angles: calc_expectation_ma_qaoa_simulation_subgraphs(angles, subgraphs, p)
-
-        if use_multi_angle:
-            num_angles = (len(graph.edges) + len(graph)) * p
-        else:
-            func = qaoa_decorator(func, len(graph.edges), len(graph))
-            num_angles = 2 * p
-        return Evaluator(change_sign(func), num_angles)
+        target_terms = [set(edge) for edge in get_index_edge_list(graph, edge_list)]
+        target_term_coeffs = [-1 / 2] * len(target_terms) + [len(target_terms) / 2]
+        driver_terms = [set(edge) for edge in get_index_edge_list(graph)]
+        return Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p, use_multi_angle)
 
     @staticmethod
     def get_evaluator_analytical(graph: Graph, edge_list: list[tuple[int, int]] = None, use_multi_angle: bool = True) -> Evaluator:
@@ -117,25 +134,24 @@ def change_sign(func: callable) -> callable:
     return func_changed_sign
 
 
-def optimize_qaoa_angles(evaluator: Evaluator) -> tuple[float, ndarray]:
+def optimize_qaoa_angles(evaluator: Evaluator, num_restarts: int = 10) -> tuple[float, ndarray]:
     """
     Wrapper around optimize.minimize that restarts optimization from multiple random starting points to minimize evaluator.
     :param evaluator: Evaluator instance.
+    :param num_restarts: Number of random starting points to try.
     :return: Minimum found value and minimizing array of parameters.
     """
-    max_no_improvements = 5
-    minimum_improvement = 1e-3
     logger = logging.getLogger('QAOA')
-
     logger.debug('Optimization...')
     time_start = time.perf_counter()
+
     angles_best = np.zeros(evaluator.num_angles)
     objective_best = 0
     no_improvement_count = 0
-    while no_improvement_count < max_no_improvements:
+    for i in range(num_restarts):
         next_angles = np.random.uniform(-np.pi, np.pi, len(angles_best))
         result = optimize.minimize(evaluator.func, next_angles)
-        if -result.fun > objective_best + minimum_improvement:
+        if -result.fun > objective_best:
             no_improvement_count = 0
             objective_best = -result.fun
             angles_best = result.x

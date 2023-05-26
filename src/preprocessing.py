@@ -1,30 +1,76 @@
 """
 Functions that calculate auxiliary data structures to speed up quantum simulation.
 """
+from __future__ import annotations
+
+import copy
 from dataclasses import dataclass
 
 import numpy as np
 from networkx import Graph
 from numba import njit
 from numpy import ndarray
-import networkx as nx
 
-from src.graph_utils import get_p_subgraph, find_edge_index, get_index_edge_list
+from src.graph_utils import get_index_edge_list
 
 
 @dataclass
-class PSubgraph:
+class PSubset:
     """
-    A class that represents edge-induced p-subgraph for QAOA.
-    :var graph: Subgraph itself.
-    :var cut_vals: 2D array of size num_edges x 2 ** num_nodes with cut values for each edge in each computational basis.
-    :var edge_ind: Index of edge that induced this subgraph in subgraph's edge list.
-    :var angle_map: 1D array of indices for overall angles that pertain to this subgraph.
+    P-subset of nodes induced by a given target term.
+    :var node_subset: 1D array with subset of nodes induced by a given term and driver function.
+    :var target_vals: 1D array of size 2 ** len(node_subset) of target function values for all computational basis states of this subset.
+    :var driver_term_vals: 2D array of size #terms x 2 ** len(node_subset) with values of all driver terms that belong to this subset for all computational basis states of this
+    subset.
+    :var angle_map: 1D array with indices of angles corresponding to terms and nodes of this subset in the overall angle array.
     """
-    graph: Graph
-    cut_vals: ndarray
-    edge_ind: int
+    node_subset: ndarray
+    target_vals: ndarray
+    driver_term_vals: ndarray
     angle_map: ndarray
+
+    @staticmethod
+    def create(total_qubits: int, inducing_term: set[int], driver_terms: list[set[int]], p: int) -> PSubset:
+        """
+        Creates an instance of PSubset.
+        :param total_qubits: Total number of qubits in the problem.
+        :param inducing_term: Indices of qubits in the inducing term.
+        :param driver_terms: Indices of qubits of each term in Z-expansion of the driver function.
+        :param p: Number of QAOA layers.
+        :return: Instance of PSubset class.
+        """
+        current_subset = copy.deepcopy(inducing_term)
+        for i in range(p):
+            next_subset = copy.deepcopy(current_subset)
+            for term_ind, term in enumerate(driver_terms):
+                if term & current_subset:
+                    next_subset |= term
+            current_subset = next_subset
+        node_subset = np.array(list(current_subset))
+
+        ind_map = {old_ind: new_ind for new_ind, old_ind in enumerate(node_subset)}
+        inducing_term_new = np.array([ind_map[old_ind] for old_ind in inducing_term])
+        target_vals = evaluate_z_term(inducing_term_new, len(node_subset))
+
+        subset_term_inds = []
+        subset_term_vals = []
+        for ind, term in enumerate(driver_terms):
+            if term.issubset(current_subset):
+                subset_term_inds.append(ind)
+                term_new = np.array([ind_map[old_ind] for old_ind in term])
+                term_new_vals = evaluate_z_term(term_new, len(node_subset))
+                subset_term_vals.append(term_new_vals)
+        subset_term_inds = np.array(subset_term_inds)
+        subset_term_vals = np.array(subset_term_vals)
+
+        angle_map = []
+        angles_per_layer = len(driver_terms) + total_qubits
+        for i in range(p):
+            angle_map.extend(subset_term_inds + i * angles_per_layer)
+            angle_map.extend(node_subset + len(driver_terms) + i * angles_per_layer)
+        angle_map = np.array(angle_map)
+
+        return PSubset(current_subset, target_vals, subset_term_vals, angle_map)
 
 
 @njit
@@ -77,33 +123,3 @@ def evaluate_graph_cut(graph: Graph, edge_list: list[tuple[int, int]] = None) ->
     """
     index_edge_list = get_index_edge_list(graph, edge_list)
     return evaluate_graph_cut_index_edge(index_edge_list, len(graph))
-
-
-def preprocess_subgraphs(graph: Graph, p: int, edge_list: list[tuple[int, int]] = None) -> list[PSubgraph]:
-    """
-    Calculates p-subgraphs and related structures for each edge in the list.
-    :param graph: Considered graph.
-    :param p: Number of layers of QAOA.
-    :param edge_list: List of considered edges in graph. If None, all edges are considered.
-    :return: List of p-subgraphs for all specified edges.
-    """
-    if edge_list is None:
-        edge_list = graph.edges
-
-    nx.set_node_attributes(graph, {node: ind for ind, node in enumerate(graph.nodes)}, name='index')
-    nx.set_edge_attributes(graph, {edge: ind for ind, edge in enumerate(graph.edges)}, name='index')
-    subgraphs = []
-    for edge in edge_list:
-        next_subgraph = get_p_subgraph(graph, edge, p)
-        cut_vals = np.array([evaluate_edge_cut(edge, len(next_subgraph)) for edge in get_index_edge_list(next_subgraph)])
-        edge_ind = find_edge_index(next_subgraph, edge)
-
-        angle_map = []
-        for u, v, ind in next_subgraph.edges.data('index'):
-            angle_map.append(ind)
-        for u, ind in next_subgraph.nodes.data('index'):
-            angle_map.append(ind + graph.number_of_edges())
-        angle_map = np.array(angle_map)
-
-        subgraphs.append(PSubgraph(next_subgraph, cut_vals, edge_ind, angle_map))
-    return subgraphs

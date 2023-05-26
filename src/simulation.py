@@ -2,11 +2,10 @@
 Functions that evaluate expectation values in QAOA directly through quantum simulation.
 """
 import numpy as np
-import scipy.linalg as linalg
 from numba import njit
 from numpy import ndarray, sin, cos
 
-from src.preprocessing import PSubgraph
+from src.preprocessing import PSubset
 
 
 @njit
@@ -79,26 +78,7 @@ def calc_expectation_diagonal(psi: ndarray, diagonal_vals: ndarray) -> float:
     return np.real(np.vdot(psi, diagonal_vals * psi))
 
 
-def calc_expectation_ma_qaoa_simulation_subgraphs(angles: ndarray, subgraphs: list[PSubgraph], p: int) -> float:
-    """
-    Calculates objective expectation for given angles with MA-QAOA ansatz by separate simulation of each p-subgraph.
-    :param angles: 1D array of all angles for all layers. Format: Angles are specified in the order of application, i.e.
-    all gammas for 1st layer (in the edge order), then all betas for 1st layer (in the nodes order), then the same format repeats for all other layers.
-    :param subgraphs: List of p-subgraphs corresponding to each edge in the graph.
-    :param p: Number of QAOA layers.
-    :return: Expectation value of target function in the state corresponding to the given set of angles, i.e. <beta, gamma|C|beta, gamma>.
-    """
-    num_angles_per_layer = len(angles) // p
-    expectation = 0
-    for subgraph in subgraphs:
-        subgraph_angles = []
-        for i in range(p):
-            subgraph_angles.extend(angles[subgraph.angle_map + i * num_angles_per_layer])
-        subgraph_angles = np.array(subgraph_angles)
-        expectation += calc_expectation_general_qaoa(subgraph_angles, subgraph.cut_vals[subgraph.edge_ind, :], subgraph.cut_vals, p)
-    return expectation
-
-
+@njit
 def calc_expectation_general_qaoa(angles: ndarray, target_vals: ndarray, driver_term_vals: ndarray, p: int) -> float:
     """
     Calculates target function expectation value for given set of driver terms and corresponding weights.
@@ -120,22 +100,18 @@ def calc_expectation_general_qaoa(angles: ndarray, target_vals: ndarray, driver_
     return calc_expectation_diagonal(psi, target_vals)
 
 
-def apply_mixer_explicit(betas: ndarray, psi: ndarray) -> ndarray:
+def calc_expectation_general_qaoa_subsets(angles: ndarray, subsets: list[PSubset], subset_coeffs: list[float], p: int) -> float:
     """
-    Applies mixer unitary to a given state psi. Explicitly creates mixer matrix as a sum of tensor products.
-    :param betas: 1D array with rotation angles for each qubit.
-    :param psi: Current quantum state vector.
-    :return: New quantum state vector.
+    Calculates objective expectation for given angles with generalized QAOA ansatz by separate simulation of each p-subset.
+    :param angles: 1D array of all angles for all layers. Format: Angles are specified in the order of application, i.e.
+    all gammas for 1st layer (in the term order), then all betas for 1st layer (in the qubits order), then the same format repeats for all other layers.
+    :param subsets: List of p-subsets corresponding to each term of the target function.
+    :param subset_coeffs: List of size len(subsets) + 1 with multiplier coefficients for each subset given in the same order. The last extra coefficient is a shift.
+    :param p: Number of QAOA layers.
+    :return: Expectation value of target function in the state corresponding to the given set of angles and driver terms.
     """
-    pauli_i = np.array([[1, 0], [0, 1]])
-    pauli_x = np.array([[0, 1], [1, 0]])
-    ub = 1
-    for i in range(len(betas)):
-        next_tensor = 1
-        for j in range(len(betas)):
-            if i == j:
-                next_tensor = np.kron(pauli_x, next_tensor)
-            else:
-                next_tensor = np.kron(pauli_i, next_tensor)
-        ub *= linalg.expm(-1j * betas[i] * next_tensor)
-    return np.matmul(ub, psi)
+    expectation = subset_coeffs[-1]
+    for ind, subset in enumerate(subsets):
+        subset_expectation = calc_expectation_general_qaoa(angles[subset.angle_map], subset.target_vals, subset.driver_term_vals, p)
+        expectation += subset_coeffs[ind] * subset_expectation
+    return expectation
