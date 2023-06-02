@@ -1,10 +1,25 @@
 """
 Graph utilities.
 """
-
+import networkx as nx
 import numpy as np
 from networkx import Graph
 from numpy import ndarray
+
+
+def get_edge_diameter(graph: Graph) -> int:
+    """
+    Returns edge diameter of the graph, i.e. maximum number of BFS layers necessary to discover all edges.
+    :param graph: Graph.
+    :return: Edge diameter.
+    """
+    peripheral_nodes = nx.periphery(graph)
+    diameter = nx.diameter(graph)
+    for node in peripheral_nodes:
+        last_edge = list(nx.edge_bfs(graph, node))[-1]
+        if nx.shortest_path_length(graph, node, last_edge[0]) == diameter and nx.shortest_path_length(graph, node, last_edge[1]) == diameter:
+            return diameter + 1
+    return diameter
 
 
 def get_index_edge_list(graph: Graph, edge_list: list[tuple[int, int]] = None) -> ndarray:
