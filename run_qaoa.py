@@ -8,7 +8,7 @@ import time
 import networkx as nx
 import numpy as np
 
-from src.graph_utils import get_index_edge_list
+from src.graph_utils import get_index_edge_list, get_edge_diameter
 from src.optimization import optimize_qaoa_angles, Evaluator
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
 import matplotlib.pyplot as plt
@@ -57,21 +57,26 @@ def run_point():
 
 
 def run_draw():
-    graph = nx.read_gml('graphs/nodes_8/4.gml', destringizer=int)
+    # graph = nx.read_gml('graphs/nodes_8/4575.gml', destringizer=int)
+    # graph = nx.read_gml('graphs/nodes_8/4633.gml', destringizer=int)
+    # graph = nx.read_gml('graphs/nodes_8/2914.gml', destringizer=int)
+    # graph = nx.read_gml('graphs/nodes_8/749.gml', destringizer=int)
+    # graph = nx.read_gml('graphs/nodes_8/5956.gml', destringizer=int)
+    graph = nx.read_gml('graphs/nodes_8/7921.gml', destringizer=int)
     nx.draw(graph)
     plt.show()
 
 
 def run_optimization():
-    graph = nx.read_gml('graphs/simple/reg4_n7_e14.gml', destringizer=int)
-    p = 1
+    graph = nx.read_gml('graphs/nodes_8/5956.gml', destringizer=int)
+    p = 2
 
-    # target_vals = evaluate_graph_cut(graph)
-    # # driver_term_vals = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
-    # # driver_term_vals = np.array([evaluate_z_term(term, len(graph)) for term in it.combinations(range(len(graph)), 2)])
-    # driver_term_vals = np.array([evaluate_z_term(term, len(graph)) for term in it.combinations(range(len(graph)), 1)])
-    # use_multi_angle = True
-    # evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, use_multi_angle)
+    target_vals = evaluate_graph_cut(graph)
+    # driver_term_vals = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
+    # driver_term_vals = np.array([evaluate_z_term(term, len(graph)) for term in it.combinations(range(len(graph)), 2)])
+    driver_term_vals = np.array([evaluate_z_term(term, len(graph)) for term in it.combinations(range(len(graph)), 1)])
+    use_multi_angle = True
+    evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, use_multi_angle)
 
     # target_terms = [set(edge) for edge in get_index_edge_list(graph)]
     # target_term_coeffs = [-1 / 2] * len(graph.edges) + [len(graph.edges) / 2]
@@ -81,9 +86,9 @@ def run_optimization():
     # driver_terms = [set(term) for term in it.combinations(range(len(graph)), 1)]
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
-    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=False)
+    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p)
 
-    # evaluator = Evaluator.get_evaluator_standard_maxcut_subgraphs(graph, p, use_multi_angle=False)
+    # evaluator = Evaluator.get_evaluator_standard_maxcut_subgraphs(graph, p)
 
     objective_best, angles_best = optimize_qaoa_angles(evaluator)
     print(f'Best achieved objective: {objective_best}')
@@ -94,7 +99,8 @@ if __name__ == '__main__':
     logging.basicConfig()
     logger = logging.getLogger('QAOA')
     logger.setLevel(logging.DEBUG)
+
     # add_graph()
-    run_point()
-    # run_optimization()
+    # run_point()
+    run_optimization()
     # run_draw()
