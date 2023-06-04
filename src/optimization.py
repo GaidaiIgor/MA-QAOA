@@ -151,6 +151,7 @@ def optimize_qaoa_angles(evaluator: Evaluator, num_restarts: int = 10) -> tuple[
     for i in range(num_restarts):
         next_angles = np.random.uniform(-np.pi, np.pi, len(angles_best))
         result = optimize.minimize(evaluator.func, next_angles)
+        print(f'Iteration {i}, Result: {-result.fun}')
         if -result.fun > objective_best:
             no_improvement_count = 0
             objective_best = -result.fun
