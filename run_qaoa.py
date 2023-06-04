@@ -1,7 +1,6 @@
 """
 Example uses of the library.
 """
-import itertools as it
 import logging
 import time
 
@@ -9,7 +8,7 @@ import networkx as nx
 import numpy as np
 import csv
 
-from src.graph_utils import get_index_edge_list, get_edge_diameter
+from src.graph_utils import get_index_edge_list
 from src.optimization import optimize_qaoa_angles, Evaluator
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
 import matplotlib.pyplot as plt
@@ -27,10 +26,9 @@ def add_graph():
 def run_point():
     graph = nx.read_gml('graphs/nodes_8/0.gml', destringizer=int)
     p = 1
-    num_angles = (len(graph) + len(graph.edges)) * p
+    # num_angles = (len(graph) + len(graph.edges)) * p
     angles = np.array([0.74999998, -0.25000006, 0.75000002, 0.25000006, 0.25000001, -0.25, -0.75000001, -0.74999999, -0.25000004, -0.25000003, 0.75000004, 0.25, 0.25000005,
-                       0.75000006, 0.24999999, -0.25])
-    angles = angles * np.pi
+                       0.75000006, 0.24999999, -0.25]) * np.pi
 
     logger.debug('Preprocessing started...')
     time_start = time.perf_counter()
