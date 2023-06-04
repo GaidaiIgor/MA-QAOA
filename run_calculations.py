@@ -72,7 +72,7 @@ def optimize_expectation_parallel(paths, method, reader, p, num_workers):
             path_tokens = path.split(result[0])
             output_path = path.join(path_tokens[0], 'output', path_tokens[1])
             result_df = DataFrame({'GQAOA': [result[1]]})
-            existing_df = pd.read_csv(output_path) if path.exists(output_path) else DataFrame()
+            existing_df = pd.read_csv(output_path, index_col=0) if path.exists(output_path) else DataFrame()
             new_df = pd.concat([existing_df, result_df], ignore_index=True)
             new_df.to_csv(output_path)
 
