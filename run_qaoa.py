@@ -67,28 +67,8 @@ def run_draw():
     plt.show()
 
 
-def read_graph(base, D, N, I):
-    edges = []
-    with open(f"{base}/G{D}#{N}_{I}.csv") as graph_file:
-        graph_reader = csv.reader(graph_file, delimiter=',')
-        for i, row in enumerate(graph_reader):
-            if i == 0:
-                _, M, C_opt, MIPGap = row
-            elif i == 1:
-                solution = row
-            else:
-                i, j = row
-                edges.append((int(i), int(j)))
-    solution = [int(x) for x in solution]
-    graph_attr = {"Nodes": N, "Edges": int(M), "Cost": float(C_opt),
-                  "MIPGap": float(MIPGap), "Solution": solution}
-    return graph_attr, edges
-
-
 def run_optimization():
-    graph_attr, edges = read_graph('graphs/simple', 10, 128, 1)
-    graph = nx.from_edgelist(edges)
-    # graph = nx.read_gml('graphs/nodes_8/0.gml', destringizer=int)
+    graph = nx.read_gml('graphs/nodes_8/0.gml', destringizer=int)
     p = 1
 
     # target_vals = evaluate_graph_cut(graph)

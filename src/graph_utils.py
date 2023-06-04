@@ -37,3 +37,10 @@ def get_index_edge_list(graph: Graph, edge_list: list[tuple[int, int]] = None) -
     for edge in edge_list:
         index_edge_list.append([node_indices[edge[0]], node_indices[edge[1]]])
     return np.array(index_edge_list)
+
+
+def read_graph_xqaoa(path):
+    with open(path) as f:
+        lines = f.readlines()
+    lines = lines[2:]
+    return nx.read_edgelist(lines, delimiter=',')

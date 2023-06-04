@@ -13,7 +13,7 @@ import glob
 
 
 from src.optimization import Evaluator, optimize_qaoa_angles
-from src.graph_utils import get_edge_diameter, get_index_edge_list
+from src.graph_utils import get_edge_diameter, get_index_edge_list, read_graph_xqaoa
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
 
 
@@ -32,16 +32,16 @@ def extend_csv():
     df.to_csv('output2.csv')
 
 
-def worker_general_qaoa(path, p):
-    graph = nx.read_gml(path, destringizer=int)
+def worker_general_qaoa(path, reader, p):
+    graph = reader(path)
     target_vals = evaluate_graph_cut(graph)
     driver_term_vals = np.array([evaluate_z_term(np.array(term), len(graph)) for term in it.combinations(range(len(graph)), 1)])
     evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p)
     return path, *optimize_qaoa_angles(evaluator, num_restarts=1)
 
 
-def worker_general_qaoa_sub(path, p):
-    graph = nx.read_gml(path, destringizer=int)
+def worker_general_qaoa_sub(path, reader, p):
+    graph = reader(path)
     target_terms = [set(edge) for edge in get_index_edge_list(graph)]
     target_term_coeffs = [-1 / 2] * len(graph.edges) + [len(graph.edges) / 2]
     driver_terms = [set(term) for term in it.combinations(range(len(graph)), 1)]
@@ -49,24 +49,24 @@ def worker_general_qaoa_sub(path, p):
     return path, *optimize_qaoa_angles(evaluator, num_restarts=1)
 
 
-def worker_standard_qaoa(path, p):
-    graph = nx.read_gml(path, destringizer=int)
+def worker_standard_qaoa(path, reader, p):
+    graph = reader(path)
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=False)
     return path, *optimize_qaoa_angles(evaluator, num_restarts=1)
 
 
-def select_worker_func(method, p):
+def select_worker_func(method, reader, p):
     if method == 'general':
-        worker_func = partial(worker_general_qaoa, p=p)
+        worker_func = partial(worker_general_qaoa, reader=reader, p=p)
     elif method == 'general_sub':
-        worker_func = partial(worker_general_qaoa_sub, p=p)
+        worker_func = partial(worker_general_qaoa_sub, reader=reader, p=p)
     elif method == 'standard':
-        worker_func = partial(worker_standard_qaoa, p=p)
+        worker_func = partial(worker_standard_qaoa, reader=reader, p=p)
     return worker_func
 
 
-def optimize_expectation_parallel(paths, method, p, num_workers):
-    worker_func = select_worker_func(method, p)
+def optimize_expectation_parallel(paths, method, reader, p, num_workers):
+    worker_func = select_worker_func(method, reader, p)
     with Pool(num_workers) as pool:
         for result in tqdm(pool.imap(worker_func, paths), total=len(paths), smoothing=0, ascii=' █'):
             path_tokens = path.split(result[0])
@@ -80,13 +80,14 @@ def optimize_expectation_parallel(paths, method, p, num_workers):
 def run_graphs_parallel():
     paths = glob.glob(f'graphs/xqaoa/*.csv')
     method = 'general_sub'
+    reader = read_graph_xqaoa
     p = 1
     num_workers = 20
     num_iterations = 10
 
     for i in range(num_iterations):
         print(f'Iteration {i}')
-        optimize_expectation_parallel(paths, method, p, num_workers)
+        optimize_expectation_parallel(paths, method, reader, p, num_workers)
 
 
 if __name__ == '__main__':
