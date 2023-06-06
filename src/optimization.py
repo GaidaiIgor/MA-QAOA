@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from functools import partial
 from typing import Callable
 
 import numpy as np
@@ -13,7 +14,7 @@ import scipy.optimize as optimize
 from networkx import Graph
 from numpy import ndarray
 
-from src.analytical import calc_expectation_ma_qaoa_analytical_p1
+from src.analytical import calc_expectation_ma_qaoa_analytical_p1, calc_expectation_general_analytical_z1
 from src.graph_utils import get_index_edge_list
 from src.original_qaoa import qaoa_decorator
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
@@ -105,9 +106,25 @@ class Evaluator:
         return Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p, use_multi_angle)
 
     @staticmethod
-    def get_evaluator_analytical(graph: Graph, edge_list: list[tuple[int, int]] = None, use_multi_angle: bool = True) -> Evaluator:
+    def get_evaluator_general_z1_analytical(graph: Graph, use_multi_angle: bool = True) -> Evaluator:
         """
-        Returns analytical evaluator of negative target expectation for p=1.
+        Returns analytical evaluator of negative target expectation for the first-order generalized QAOA.
+        :param graph: Target graph for MaxCut.
+        :param use_multi_angle: True to use independent betas and gammas for each node. False to force equal betas and gammas.
+        :return: Evaluator instance. The input order is the same as in `get_evaluator_general`.
+        """
+        func = partial(calc_expectation_general_analytical_z1, graph=graph)
+        if use_multi_angle:
+            num_angles = 2 * len(graph)
+        else:
+            func = qaoa_decorator(func, len(graph), len(graph))
+            num_angles = 2
+        return Evaluator(change_sign(func), num_angles)
+
+    @staticmethod
+    def get_evaluator_standard_maxcut_analytical(graph: Graph, edge_list: list[tuple[int, int]] = None, use_multi_angle: bool = True) -> Evaluator:
+        """
+        Returns analytical evaluator of negative target expectation for p=1 with MA-QAOA ansatz.
         :param graph: Target graph for MaxCut.
         :param edge_list: List of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
         :param use_multi_angle: True to use individual angles for each edge and node. False to use 1 angle for all edges and 1 angle for all nodes.

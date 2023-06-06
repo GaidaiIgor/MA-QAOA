@@ -40,7 +40,7 @@ class TestMAQAOA:
 
     def test_qaoa_analytical(self, reg4_n7_e14):
         """ Tests analytical cut expectation obtained with QAOA on a 4-regular graph with triangles for p=1. """
-        evaluator = Evaluator.get_evaluator_analytical(reg4_n7_e14, use_multi_angle=False)
+        evaluator = Evaluator.get_evaluator_standard_maxcut_analytical(reg4_n7_e14, use_multi_angle=False)
         objective_best = optimize_qaoa_angles(evaluator)[0]
         assert abs(objective_best - 8.735) < 1e-3
 
@@ -58,7 +58,7 @@ class TestMAQAOA:
 
     def test_ma_qaoa_analytical(self, reg4_n7_e14):
         """ Tests that cut expectation obtained with analytical expression for MA-QAOA on a 3-regular tree subgraph is the same as simulation. """
-        evaluator = Evaluator.get_evaluator_analytical(reg4_n7_e14)
+        evaluator = Evaluator.get_evaluator_standard_maxcut_analytical(reg4_n7_e14)
         objective_best = optimize_qaoa_angles(evaluator)[0]
         assert abs(objective_best - 10) < 1e-2
 
