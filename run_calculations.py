@@ -10,11 +10,30 @@ from tqdm import tqdm
 import os.path as path
 import itertools as it
 import glob
+from pathlib import Path
 
 
 from src.optimization import Evaluator, optimize_qaoa_angles
 from src.graph_utils import get_edge_diameter, get_index_edge_list, read_graph_xqaoa
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
+
+
+def collect_results_from(base_path, columns, aggregator):
+    paths = glob.glob(f'{base_path}/*.csv')
+    stat = []
+    for path in paths:
+        df = pd.read_csv(path)
+        stat.append(aggregator(df[columns], axis=0))
+    index_keys = [Path(path).parts[-1] for path in paths]
+    summary_df = DataFrame(stat, columns=columns, index=index_keys)
+    return summary_df
+
+
+def collect_results_xqaoa():
+    aggregator = np.mean
+    df_gqaoa = collect_results_from('graphs/xqaoa/output', ['GQAOA'], aggregator)
+    df_xqaoa = collect_results_from('simulation_data', ['XQAOA', 'Geomans_Williamson'], aggregator)
+    return df_gqaoa.join(df_xqaoa)
 
 
 def extend_csv():
@@ -91,5 +110,6 @@ def run_graphs_parallel():
 
 
 if __name__ == '__main__':
+    collect_results_xqaoa()
     # extend_csv()
-    run_graphs_parallel()
+    # run_graphs_parallel()
