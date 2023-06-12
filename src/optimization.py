@@ -14,7 +14,7 @@ import scipy.optimize as optimize
 from networkx import Graph
 from numpy import ndarray
 
-from src.analytical import calc_expectation_ma_qaoa_analytical_p1, calc_expectation_general_analytical_z1
+from src.analytical import calc_expectation_ma_qaoa_analytical_p1, calc_expectation_general_analytical_z1, calc_expectation_general_analytical_z1_reduced
 from src.graph_utils import get_index_edge_list
 from src.original_qaoa import qaoa_decorator
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
@@ -43,7 +43,7 @@ class Evaluator:
         then mixer angles for 1st layer in the qubits order, then the same format repeats for other layers.
         """
         num_qubits = len(target_vals).bit_length() - 1
-        func = lambda angles: calc_expectation_general_qaoa(angles, target_vals, driver_term_vals, p)
+        func = lambda angles: calc_expectation_general_qaoa(angles, driver_term_vals, p, target_vals)
 
         if use_multi_angle:
             num_angles = (driver_term_vals.shape[0] + num_qubits) * p
@@ -114,11 +114,23 @@ class Evaluator:
         :return: Evaluator instance. The input order is the same as in `get_evaluator_general`.
         """
         func = partial(calc_expectation_general_analytical_z1, graph=graph)
+
         if use_multi_angle:
             num_angles = 2 * len(graph)
         else:
             func = qaoa_decorator(func, len(graph), len(graph))
             num_angles = 2
+        return Evaluator(change_sign(func), num_angles)
+
+    @staticmethod
+    def get_evaluator_general_z1_analytical_reduced(graph: Graph) -> Evaluator:
+        """
+        Returns analytical evaluator of reduced analytical target expectation for the first-order generalized QAOA.
+        :param graph: Target graph for MaxCut.
+        :return: Evaluator instance. The input is 1D array of gammas in the edge order of graph.
+        """
+        func = partial(calc_expectation_general_analytical_z1_reduced, graph=graph)
+        num_angles = len(graph)
         return Evaluator(change_sign(func), num_angles)
 
     @staticmethod

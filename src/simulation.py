@@ -2,10 +2,12 @@
 Functions that evaluate expectation values in QAOA directly through quantum simulation.
 """
 import numpy as np
+from networkx import Graph
 from numba import njit
 from numpy import ndarray, sin, cos
 
-from src.preprocessing import PSubset
+from src.graph_utils import get_index_edge_list
+from src.preprocessing import PSubset, evaluate_edge_cut
 
 
 @njit
@@ -78,6 +80,21 @@ def calc_expectation_diagonal(psi: ndarray, diagonal_vals: ndarray) -> float:
     return np.real(np.vdot(psi, diagonal_vals * psi))
 
 
+def calc_expectation_per_edge(psi: ndarray, graph: Graph) -> list[float]:
+    """
+    Calculates cut expectation of each edge in a given state psi.
+    :param psi: Quantum state vector.
+    :param graph: Graph with edges.
+    :return: A list of cut QAOA expectations in the order of graph.edges.
+    """
+    expectations = []
+    for edge in get_index_edge_list(graph):
+        edge_vals = evaluate_edge_cut(edge, len(graph))
+        edge_expectation = calc_expectation_diagonal(psi, edge_vals)
+        expectations.append(edge_expectation)
+    return expectations
+
+
 @njit
 def construct_qaoa_state(angles: ndarray, driver_term_vals: ndarray, p: int) -> ndarray:
     """
@@ -98,7 +115,6 @@ def construct_qaoa_state(angles: ndarray, driver_term_vals: ndarray, p: int) -> 
     return psi
 
 
-@njit
 def calc_expectation_general_qaoa(angles: ndarray, driver_term_vals: ndarray, p: int, target_vals: ndarray) -> float:
     """
     Calculates target function expectation value for given set of driver terms and corresponding weights.
