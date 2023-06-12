@@ -79,15 +79,13 @@ def calc_expectation_diagonal(psi: ndarray, diagonal_vals: ndarray) -> float:
 
 
 @njit
-def calc_expectation_general_qaoa(angles: ndarray, target_vals: ndarray, driver_term_vals: ndarray, p: int) -> float:
+def construct_qaoa_state(angles: ndarray, driver_term_vals: ndarray, p: int) -> ndarray:
     """
-    Calculates target function expectation value for given set of driver terms and corresponding weights.
-    :param angles: 1D array of angles for all layers. Format: first, term angles for 1st layer in the same order as rows of driver_term_vals,
-    then mixer angles for 1st layer in the qubits order, then the same format repeats for other layers.
-    :param target_vals: 1D array of target function values for all computational basis states.
+    Constructs QAOA state corresponding to the given angles and terms, assuming standard initial state.
+    :param angles: 1D array of angles for all layers. Same format as in `calc_expectation_general_qaoa`.
     :param driver_term_vals: 2D array of size #terms x 2 ** #qubits. Each row is an array of values of a driver function's term for each computational basis.
     :param p: Number of QAOA layers.
-    :return: Expectation value of the target function in the state corresponding to the given parameters and terms.
+    :return: Resulting quantum state vector.
     """
     psi = np.ones(driver_term_vals.shape[1], dtype=np.complex128) / np.sqrt(driver_term_vals.shape[1])
     num_params_per_layer = len(angles) // p
@@ -97,6 +95,21 @@ def calc_expectation_general_qaoa(angles: ndarray, target_vals: ndarray, driver_
         psi = apply_driver(gammas, driver_term_vals, psi)
         betas = layer_params[driver_term_vals.shape[0]:]
         psi = apply_mixer_individual(betas, psi)
+    return psi
+
+
+@njit
+def calc_expectation_general_qaoa(angles: ndarray, driver_term_vals: ndarray, p: int, target_vals: ndarray) -> float:
+    """
+    Calculates target function expectation value for given set of driver terms and corresponding weights.
+    :param angles: 1D array of angles for all layers. Format: first, term angles for 1st layer in the same order as rows of driver_term_vals,
+    then mixer angles for 1st layer in the qubits order, then the same format repeats for other layers.
+    :param driver_term_vals: 2D array of size #terms x 2 ** #qubits. Each row is an array of values of a driver function's term for each computational basis.
+    :param p: Number of QAOA layers.
+    :param target_vals: 1D array of target function values for all computational basis states.
+    :return: Expectation value of the target function in the state corresponding to the given parameters and terms.
+    """
+    psi = construct_qaoa_state(angles, driver_term_vals, p)
     return calc_expectation_diagonal(psi, target_vals)
 
 
@@ -112,6 +125,6 @@ def calc_expectation_general_qaoa_subsets(angles: ndarray, subsets: list[PSubset
     """
     expectation = subset_coeffs[-1]
     for ind, subset in enumerate(subsets):
-        subset_expectation = calc_expectation_general_qaoa(angles[subset.angle_map], subset.target_vals, subset.driver_term_vals, p)
+        subset_expectation = calc_expectation_general_qaoa(angles[subset.angle_map], subset.driver_term_vals, p, subset.target_vals)
         expectation += subset_coeffs[ind] * subset_expectation
     return expectation
