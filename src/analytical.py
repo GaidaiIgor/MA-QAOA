@@ -4,6 +4,7 @@ Functions that provide analytical formulas for evaluation of the expectation val
 import math
 
 import networkx as nx
+import numpy as np
 from networkx import Graph
 from numpy import ndarray, sin, cos
 
@@ -23,6 +24,17 @@ def calc_expectation_general_analytical_z1(angles: ndarray, graph: Graph) -> flo
         betas = angles[edge + len(graph)]
         expectation -= sin(2 * betas[0]) * sin(2 * betas[1]) * sin(2 * gammas[0]) * sin(2 * gammas[1]) / 2
     return expectation
+
+
+def calc_expectation_general_analytical_z1_reduced(angles: ndarray, graph: Graph) -> float:
+    """
+    A version of `calc_expectation_general_analytical_z1` that fixes all betas and varies gammas only.
+    :param angles: 1D array of all angles for the first GQAOA layer in the same order as in `get_evaluator_general`.
+    :param graph: Graph for which MaxCut problem is being solved.
+    :return: Target expectation value for the given angles.
+    """
+    full_angles = np.array([np.pi / 4] * len(graph) + list(angles))
+    return calc_expectation_general_analytical_z1(full_angles, graph)
 
 
 def calc_expectation_ma_qaoa_analytical_p1(angles: ndarray, graph: Graph, edge_list: list[tuple[int, int]] = None) -> float:
