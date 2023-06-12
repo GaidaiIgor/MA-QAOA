@@ -22,6 +22,15 @@ def get_edge_diameter(graph: Graph) -> int:
     return diameter
 
 
+def get_node_indices(graph: Graph) -> dict:
+    """
+    Returns a dict that maps node labels to their indices.
+    :param graph: Graph.
+    :return: Dict that maps node labels to their indices.
+    """
+    return {node: i for i, node in enumerate(graph.nodes)}
+
+
 def get_index_edge_list(graph: Graph, edge_list: list[tuple[int, int]] = None) -> ndarray:
     """
     Returns 2D array of edges specified by pairs of node indices in the order of graph.nodes instead of node labels.
@@ -32,7 +41,7 @@ def get_index_edge_list(graph: Graph, edge_list: list[tuple[int, int]] = None) -
     if edge_list is None:
         edge_list = graph.edges
 
-    node_indices = {node: ind for ind, node in enumerate(graph.nodes)}
+    node_indices = get_node_indices(graph)
     index_edge_list = []
     for edge in edge_list:
         index_edge_list.append([node_indices[edge[0]], node_indices[edge[1]]])
