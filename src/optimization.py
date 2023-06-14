@@ -16,7 +16,7 @@ from numpy import ndarray
 
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1, calc_expectation_general_analytical_z1, calc_expectation_general_analytical_z1_reduced
 from src.graph_utils import get_index_edge_list
-from src.original_qaoa import qaoa_decorator
+from src.original_qaoa import qaoa_decorator, qaoa_scheme_decorator
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
 from src.simulation import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
 
@@ -50,6 +50,14 @@ class Evaluator:
         else:
             func = qaoa_decorator(func, driver_term_vals.shape[0], num_qubits)
             num_angles = 2 * p
+        return Evaluator(change_sign(func), num_angles)
+
+    @staticmethod
+    def get_evaluator_general_scheme(target_vals: ndarray, driver_term_vals: ndarray, p: int, duplication_scheme: list[ndarray]) -> Evaluator:
+        """ Test method """
+        func = lambda angles: calc_expectation_general_qaoa(angles, driver_term_vals, p, target_vals)
+        func = qaoa_scheme_decorator(func, duplication_scheme)
+        num_angles = len(duplication_scheme)
         return Evaluator(change_sign(func), num_angles)
 
     @staticmethod
