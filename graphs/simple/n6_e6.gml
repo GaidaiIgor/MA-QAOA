@@ -44,4 +44,8 @@ graph [
     source 1
     target 5
   ]
+  edge [
+    source 4
+    target 5
+  ]
 ]
