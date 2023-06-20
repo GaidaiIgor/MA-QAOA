@@ -79,9 +79,7 @@ def generate_all_duplication_schemes_p1_22(num_edges: int, num_nodes: int) -> li
     subset_combos = it.product(edge_subsets, node_subsets)
     duplication_schemes = []
     for edge_combo, node_combo in subset_combos:
-        next_scheme = [np.array(list(edge_combo)), np.array(list(edge_indices - edge_combo)), np.array(list(node_combo)), np.array(list(node_indices - node_combo))]
+        next_scheme = [np.array(list(edge_combo)), np.array(list(edge_indices - set(edge_combo))), np.array(list(node_combo)) + num_edges,
+                       np.array(list(node_indices - set(node_combo))) + num_edges]
         duplication_schemes.append(next_scheme)
     return duplication_schemes
-
-
-print(generate_all_duplication_schemes_p1_22(4, 4))
