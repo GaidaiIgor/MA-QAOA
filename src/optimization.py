@@ -171,13 +171,17 @@ def change_sign(func: callable) -> callable:
     return func_changed_sign
 
 
-def optimize_qaoa_angles(evaluator: Evaluator, num_restarts: int = 10) -> tuple[float, ndarray]:
+def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, num_restarts: int = 1) -> tuple[float, ndarray]:
     """
-    Wrapper around optimize.minimize that restarts optimization from multiple random starting points to minimize evaluator.
+    Wrapper around minimizer function that restarts optimization from multiple random starting points to minimize evaluator.
     :param evaluator: Evaluator instance.
-    :param num_restarts: Number of random starting points to try.
+    :param starting_point: Starting point for optimization. Chosen randomly if None.
+    :param num_restarts: Number of random starting points to try. Has no effect if specific starting point is provided.
     :return: Minimum found value and minimizing array of parameters.
     """
+    if starting_point is not None:
+        num_restarts = 1
+
     logger = logging.getLogger('QAOA')
     logger.debug('Optimization...')
     time_start = time.perf_counter()
@@ -185,7 +189,11 @@ def optimize_qaoa_angles(evaluator: Evaluator, num_restarts: int = 10) -> tuple[
     angles_best = np.zeros(evaluator.num_angles)
     objective_best = 0
     for i in range(num_restarts):
-        next_angles = np.random.uniform(-np.pi, np.pi, len(angles_best))
+        if starting_point is not None:
+            next_angles = starting_point
+        else:
+            next_angles = np.random.uniform(-np.pi, np.pi, len(angles_best))
+
         result = optimize.minimize(evaluator.func, next_angles)
         if -result.fun > objective_best:
             objective_best = -result.fun
