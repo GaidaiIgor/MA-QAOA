@@ -71,7 +71,8 @@ def worker_general_qaoa_sub(path, reader, p):
 def worker_standard_qaoa(path, reader, p):
     graph = reader(path)
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=False)
-    return path, *optimize_qaoa_angles(evaluator, num_restarts=1)
+    expectation, angles = optimize_qaoa_angles(evaluator, num_restarts=1)
+    return path, expectation / graph.graph['maxcut'], angles
 
 
 def select_worker_func(method, reader, p):
@@ -86,23 +87,25 @@ def select_worker_func(method, reader, p):
 
 def optimize_expectation_parallel(paths, method, reader, p, num_workers):
     worker_func = select_worker_func(method, reader, p)
+    results = []
     with Pool(num_workers) as pool:
         for result in tqdm(pool.imap(worker_func, paths), total=len(paths), smoothing=0, ascii=' █'):
-            path_tokens = path.split(result[0])
-            output_path = path.join(path_tokens[0], 'output', path_tokens[1])
-            result_df = DataFrame({'GQAOA': [result[1]]})
-            existing_df = pd.read_csv(output_path, index_col=0) if path.exists(output_path) else DataFrame()
-            new_df = pd.concat([existing_df, result_df], ignore_index=True)
-            new_df.to_csv(output_path)
+            key = int(path.split(result[0])[1][:-4])
+            results.append([key, *result[1:]])
+    new_df = DataFrame(results).set_axis(['key', f'qaoa_rand_p{p}', f'qaoa_rand_p{p}_angles'], axis=1).set_index('key').sort_index()
+    existing_df = pd.read_csv('output.csv', index_col=0)
+    existing_df = existing_df.join(new_df)
+    existing_df.to_csv('output2.csv')
 
 
 def run_graphs_parallel():
-    paths = glob.glob(f'graphs/xqaoa/*.csv')
-    method = 'general_sub'
-    reader = read_graph_xqaoa
-    p = 1
+    paths = glob.glob(f'graphs/nodes_8/*.gml')
+    method = 'standard'
+    # reader = read_graph_xqaoa
+    reader = partial(nx.read_gml, destringizer=int)
+    p = 6
     num_workers = 20
-    num_iterations = 10
+    num_iterations = 1
 
     for i in range(num_iterations):
         print(f'Iteration {i}')
@@ -110,6 +113,6 @@ def run_graphs_parallel():
 
 
 if __name__ == '__main__':
-    collect_results_xqaoa()
+    # collect_results_xqaoa()
     # extend_csv()
-    # run_graphs_parallel()
+    run_graphs_parallel()
