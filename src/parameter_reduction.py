@@ -21,7 +21,7 @@ def duplicate_angles(input_angles: ndarray, duplication_scheme: list[ndarray]) -
     return output_angles
 
 
-def convert_angles_qaoa_to_multi_angle(angles: ndarray, num_edges: int, num_nodes: int) -> ndarray:
+def convert_angles_qaoa_to_ma(angles: ndarray, num_edges: int, num_nodes: int) -> ndarray:
     """
     Repeats each QAOA angle necessary number of times to convert QAOA angle format to MA-QAOA.
     :param angles: angles in QAOA format (2 per layer).
@@ -45,7 +45,7 @@ def qaoa_decorator(ma_qaoa_func: callable, num_edges: int, num_nodes: int) -> ca
     :return: Adapted function that accepts angles in QAOA format.
     """
     def qaoa_wrapped(*args, **kwargs):
-        angles_maqaoa = convert_angles_qaoa_to_multi_angle(args[0], num_edges, num_nodes)
+        angles_maqaoa = convert_angles_qaoa_to_ma(args[0], num_edges, num_nodes)
         return ma_qaoa_func(angles_maqaoa, *args[1:], **kwargs)
     return qaoa_wrapped
 

@@ -12,7 +12,7 @@ import tqdm
 
 from src.graph_utils import get_index_edge_list
 from src.optimization import optimize_qaoa_angles, Evaluator
-from src.parameter_reduction import generate_all_duplication_schemes_p1_22, convert_angles_qaoa_to_multi_angle
+from src.parameter_reduction import generate_all_duplication_schemes_p1_22, convert_angles_qaoa_to_ma
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
 
 
@@ -168,7 +168,7 @@ def run_optimization_combo():
     objective_qaoa, angles_qaoa = optimize_qaoa_angles(evaluator_qaoa, num_restarts=10)
 
     evaluator_ma = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=True)
-    starting_point = convert_angles_qaoa_to_multi_angle(angles_qaoa, len(graph.edges), len(graph))
+    starting_point = convert_angles_qaoa_to_ma(angles_qaoa, len(graph.edges), len(graph))
     objective_ma, angles_ma = optimize_qaoa_angles(evaluator_ma, starting_point=starting_point)
 
     print(f'QAOA: {objective_qaoa}')
