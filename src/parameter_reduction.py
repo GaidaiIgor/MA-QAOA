@@ -1,8 +1,9 @@
 """
-Functions that provide regular QAOA interface to MA-QAOA entry points (2 angles per layer)
+Functions that translate given parameters to MA-QAOA angles.
 """
 import numpy as np
 from numpy import ndarray
+import itertools as it
 
 
 def duplicate_angles(input_angles: ndarray, duplication_scheme: list[ndarray]) -> ndarray:
@@ -20,18 +21,6 @@ def duplicate_angles(input_angles: ndarray, duplication_scheme: list[ndarray]) -
     return output_angles
 
 
-def get_random_duplication_scheme(num_edges: int, num_nodes: int, num_params: list[int]) -> list[ndarray]:
-    """
-    Returns a duplication scheme where each layer is randomly split between the specified number of parameters.
-    :param num_edges: Number of edges in the graph.
-    :param num_nodes: Number of nodes in the graph.
-    :param num_params: List of length 2*p, where each element is the number of independent parameters for each group of gammas or betas.
-    :return: Generated duplication scheme for `duplicate_angles` function.
-    """
-    duplication_scheme = []
-    return duplication_scheme  # not implemented
-
-
 def convert_angles_qaoa_to_multi_angle(angles: ndarray, num_edges: int, num_nodes: int) -> ndarray:
     """
     Repeats each QAOA angle necessary number of times to convert QAOA angle format to MA-QAOA.
@@ -40,26 +29,51 @@ def convert_angles_qaoa_to_multi_angle(angles: ndarray, num_edges: int, num_node
     :param num_nodes: Number of nodes in the graph.
     :return: angles in MA-QAOA format (individual angle for each node and edge of the graph in each layer).
     """
-    duplication_scheme = []
-    for i in range(len(angles)):
-        block_len = num_edges if i % 2 == 0 else num_nodes
-        shift = 0 if len(duplication_scheme) == 0 else duplication_scheme[-1][-1] + 1
-        duplication_scheme.append(np.arange(block_len) + shift)
-    return duplicate_angles(angles, duplication_scheme)
+    maqaoa_angles = []
+    for gamma, beta in zip(angles[::2], angles[1::2]):
+        maqaoa_angles += [gamma] * num_edges
+        maqaoa_angles += [beta] * num_nodes
+    return np.array(maqaoa_angles)
 
 
 def qaoa_decorator(ma_qaoa_func: callable, num_edges: int, num_nodes: int) -> callable:
     """
-    Duplicates standard QAOA angles to match MA-QAOA format and executes given function that can evaluate target expectation in MA-QAOA ansatz.
-    :param ma_qaoa_func: Function that evaluates target expectation in MA-QAOA ansatz.
+    Duplicates standard QAOA angles to match MA-QAOA format and calls the provided MA-QAOA function.
+    :param ma_qaoa_func: Function that expects MA-QAOA angles as first parameter.
     :param num_edges: Number of edges in the graph.
     :param num_nodes: Number of nodes in the graph.
-    :return: Result of ma_qaoa_func.
+    :return: Adapted function that accepts angles in QAOA format.
     """
     def qaoa_wrapped(*args, **kwargs):
         angles_maqaoa = convert_angles_qaoa_to_multi_angle(args[0], num_edges, num_nodes)
         return ma_qaoa_func(angles_maqaoa, *args[1:], **kwargs)
     return qaoa_wrapped
+
+
+def linear_ramp(params: ndarray, p: int) -> ndarray:
+    """
+    Returns QAOA angles defined by the linear ramp strategy. Linear ramp changes angles linearly from starting to final over p layers.
+    :param params: 1D array of 4 numbers: starting and ending gamma, then starting and ending beta.
+    :param p: Number of QAOA layers.
+    :return: 1D array of corresponding QAOA angles.
+    """
+    gammas = np.linspace(params[0], params[1], p)
+    betas = np.linspace(params[2], params[3], p)
+    qaoa_angles = np.array(list(it.chain(*zip(gammas, betas))))
+    return qaoa_angles
+
+
+def linear_decorator(qaoa_func: callable, p: int) -> callable:
+    """
+    Translates linear ramp parameters to match QAOA format and calls the provided QAOA function.
+    :param qaoa_func: Function that expects QAOA angles as first parameter.
+    :param p: Number of QAOA layers.
+    :return: Adapted function that accepts angles in linear ramp format.
+    """
+    def linear_wrapped(*args, **kwargs):
+        qaoa_angles = linear_ramp(args[0], p)
+        return qaoa_func(qaoa_angles, *args[1:], **kwargs)
+    return linear_wrapped
 
 
 def qaoa_scheme_decorator(ma_qaoa_func: callable, duplication_scheme: list[ndarray]) -> callable:
@@ -71,6 +85,7 @@ def qaoa_scheme_decorator(ma_qaoa_func: callable, duplication_scheme: list[ndarr
 
 
 def generate_all_duplication_schemes_p1_22(num_edges: int, num_nodes: int) -> list[list[ndarray]]:
+    """ Test """
     import itertools as it
     edge_indices = set(range(num_edges))
     edge_subsets = list(it.chain.from_iterable(it.combinations(edge_indices, combo_len) for combo_len in range(1, num_edges // 2 + 1)))

@@ -94,7 +94,7 @@ def evaluate_edge_cut(edge: ndarray, num_nodes: int) -> ndarray:
     Evaluates edge cut function for all computational basis states.
     :param edge: edge, specified as a 1D array with 2 indices of the corresponding nodes.
     :param num_nodes: Total number of nodes in the graph.
-    :return: 1D array of size 2 ** num_nodes with 1 if the given edge is cut in the corresponding basis or 0 otherwise.
+    :return: 1D array of size 2 ** num_qubits with 1 if the given edge is cut in the corresponding basis or 0 otherwise.
     """
     z_term = evaluate_z_term(edge, num_nodes)
     return (1 - z_term) // 2
@@ -104,9 +104,9 @@ def evaluate_edge_cut(edge: ndarray, num_nodes: int) -> ndarray:
 def evaluate_graph_cut_index_edge(index_edge_list: ndarray, num_nodes: int) -> ndarray:
     """
     Evaluates sum of edge cuts for all specified edges.
-    :param index_edge_list: 2D array of size num_edges x 2. Each row is an edge specified by indices of nodes in graph.nodes.
+    :param index_edge_list: 2D array of size num_driver_terms x 2. Each row is an edge specified by indices of nodes in graph.nodes.
     :param num_nodes: Total number of nodes in the graph.
-    :return: 1D array of size 2 ** num_nodes with the cut values for each computational basis.
+    :return: 1D array of size 2 ** num_qubits with the cut values for each computational basis.
     """
     res = np.zeros(2 ** num_nodes, dtype=np.int32)
     for edge in index_edge_list:
@@ -119,7 +119,7 @@ def evaluate_graph_cut(graph: Graph, edge_list: list[tuple[int, int]] = None) ->
     Evaluates sum of edge cuts for all specified edges.
     :param graph: Graph for evaluation.
     :param edge_list: List of edges that should be taken into account. If None, then all edges are taken into account.
-    :return: 1D array of size 2 ** num_nodes with the cut values for each computational basis.
+    :return: 1D array of size 2 ** num_qubits with the cut values for each computational basis.
     """
     index_edge_list = get_index_edge_list(graph, edge_list)
     return evaluate_graph_cut_index_edge(index_edge_list, len(graph))
