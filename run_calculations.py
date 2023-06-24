@@ -55,8 +55,18 @@ def worker_general_qaoa(path, reader, p):
     graph = reader(path)
     target_vals = evaluate_graph_cut(graph)
     driver_term_vals = np.array([evaluate_z_term(np.array(term), len(graph)) for term in it.combinations(range(len(graph)), 1)])
+
+    driver_term_vals_2 = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
+    # driver_term_vals_2 = np.array([evaluate_z_term(np.array(term), len(graph)) for term in it.combinations(range(len(graph)), 2)])
+    driver_term_vals = np.append(driver_term_vals, driver_term_vals_2, axis=0)
+
     evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p)
-    return path, *optimize_qaoa_angles(evaluator, num_restarts=1)
+
+    # evaluator = Evaluator.get_evaluator_general_z1_analytical_reduced(graph)
+    # starting_point = np.ones((evaluator.num_angles,)) * np.pi / 4
+
+    expectation, angles = optimize_qaoa_angles(evaluator, num_restarts=1)
+    return path, expectation / graph.graph['maxcut'], angles
 
 
 def worker_general_qaoa_sub(path, reader, p):
@@ -68,31 +78,32 @@ def worker_general_qaoa_sub(path, reader, p):
     return path, *optimize_qaoa_angles(evaluator, num_restarts=1)
 
 
-def worker_standard_qaoa(path, reader, p):
+def worker_standard_qaoa(path, reader, p, use_multi_angle):
     graph = reader(path)
-    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=False)
+    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=use_multi_angle)
     expectation, angles = optimize_qaoa_angles(evaluator, num_restarts=1)
     return path, expectation / graph.graph['maxcut'], angles
 
 
-def select_worker_func(method, reader, p):
+def select_worker_func(method, reader, p, use_multi_angle):
     if method == 'general':
         worker_func = partial(worker_general_qaoa, reader=reader, p=p)
     elif method == 'general_sub':
         worker_func = partial(worker_general_qaoa_sub, reader=reader, p=p)
     elif method == 'standard':
-        worker_func = partial(worker_standard_qaoa, reader=reader, p=p)
+        worker_func = partial(worker_standard_qaoa, reader=reader, p=p, use_multi_angle=use_multi_angle)
     return worker_func
 
 
-def optimize_expectation_parallel(paths, method, reader, p, num_workers):
-    worker_func = select_worker_func(method, reader, p)
+def optimize_expectation_parallel(paths, num_workers, col_name, method, reader, p, use_multi_angle):
+    worker_func = select_worker_func(method, reader, p, use_multi_angle)
     results = []
     with Pool(num_workers) as pool:
         for result in tqdm(pool.imap(worker_func, paths), total=len(paths), smoothing=0, ascii=' █'):
             key = int(path.split(result[0])[1][:-4])
             results.append([key, *result[1:]])
-    new_df = DataFrame(results).set_axis(['key', f'qaoa_rand_p{p}', f'qaoa_rand_p{p}_angles'], axis=1).set_index('key').sort_index()
+    new_df = DataFrame(results).set_axis(['key', f'{col_name}_p{p}', f'{col_name}_p{p}_angles'], axis=1).set_index('key').sort_index()
+    # new_df.to_csv('general.csv')
     existing_df = pd.read_csv('output.csv', index_col=0)
     existing_df = existing_df.join(new_df)
     existing_df.to_csv('output2.csv')
@@ -100,16 +111,18 @@ def optimize_expectation_parallel(paths, method, reader, p, num_workers):
 
 def run_graphs_parallel():
     paths = glob.glob(f'graphs/nodes_8/*.gml')
-    method = 'standard'
+    method = 'general'
     # reader = read_graph_xqaoa
     reader = partial(nx.read_gml, destringizer=int)
-    p = 6
+    p = 3
+    use_multi_angle = True
     num_workers = 20
     num_iterations = 1
+    col_name = 'gen12e'
 
     for i in range(num_iterations):
         print(f'Iteration {i}')
-        optimize_expectation_parallel(paths, method, reader, p, num_workers)
+        optimize_expectation_parallel(paths, num_workers, col_name, method, reader, p, use_multi_angle)
 
 
 if __name__ == '__main__':
