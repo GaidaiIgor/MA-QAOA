@@ -69,14 +69,7 @@ def run_point():
 
 
 def run_draw():
-    # graph = nx.read_gml('graphs/nodes_8/4575.gml', destringizer=int)
-    # graph = nx.read_gml('graphs/nodes_8/4633.gml', destringizer=int)
-    # graph = nx.read_gml('graphs/nodes_8/2914.gml', destringizer=int)
-    # graph = nx.read_gml('graphs/nodes_8/749.gml', destringizer=int)
-    # graph = nx.read_gml('graphs/nodes_8/5956.gml', destringizer=int)
-    # graph = nx.read_gml('graphs/nodes_8/7921.gml', destringizer=int)
-    graph = nx.read_gml('graphs/nodes_8/1000.gml', destringizer=int)  # maxcut = 8
-    # graph = nx.read_gml('graphs/simple/reg4_n6_e12.gml', destringizer=int)
+    graph = nx.read_gml('graphs/nodes_8/4634.gml', destringizer=int)
     nx.draw(graph, with_labels=True)
     plt.show()
 
@@ -108,15 +101,40 @@ def run_angle_grouping():
     print(max(optimized))
 
 
+def run_gradient():
+    graph = nx.read_gml('graphs/nodes_8/3054.gml', destringizer=int)
+    angles = np.array([0.250, 0.250, -0.250, -0.418, -0.250, 1.121, 0.250, 0.750]) * np.pi
+
+    grad = np.zeros_like(angles)
+    for i in range(len(grad)):
+        for edge in graph.edges(i):
+            grad[i] += np.sin(2 * angles[edge[1]])
+        grad[i] *= np.cos(2 * angles[i])
+
+    hessian = np.zeros((len(angles), len(angles)))
+    for i in range(len(angles)):
+        for j in range(len(angles)):
+            if i == j:
+                for edge in graph.edges(i):
+                    hessian[i, i] += np.sin(2 * angles[edge[1]])
+                hessian[i, i] *= -2 * np.sin(2 * angles[i])
+            else:
+                if not graph.has_edge(i, j):
+                    continue
+                hessian[i, j] = 2 * np.cos(2 * angles[i]) * np.cos(2 * angles[j])
+    print('Done')
+
+
 def run_optimization():
-    graph = nx.read_gml('graphs/nodes_8/1000.gml', destringizer=int)  # MC=8, MA1=7.577, Q2=7.342
+    graph = nx.read_gml('graphs/nodes_8/3054.gml', destringizer=int)  # MC=8, MA1=7.577, Q2=7.342
     # graph = read_graph_xqaoa('graphs/xqaoa/G4#128_24.csv')  # maxcut = 224, xqaoa = 222, full = 216 (516?), reduced = 210 (366)
     p = 1
     use_multi_angle = True
 
     # target_vals = evaluate_graph_cut(graph)
     # edges = [edge for edge in get_index_edge_list(graph)]
-    # driver_term_vals = np.array([evaluate_z_term(edge, len(graph)) for edge in edges])
+    # # driver_term_vals = np.array([evaluate_z_term(edge, len(graph)) for edge in edges])
+    # driver_term_vals = np.array([evaluate_z_term(np.array([node]), len(graph)) for node in range(len(graph))])
     # evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, use_multi_angle=use_multi_angle)
 
     # target_terms = [set(edge) for edge in get_index_edge_list(graph)]
@@ -126,11 +144,15 @@ def run_optimization():
     # # driver_terms = [set(term) for term in it.chain(it.combinations(range(len(graph)), 1), it.combinations(range(len(graph)), 2))]
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
-    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=use_multi_angle)
+    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=use_multi_angle)
 
     # evaluator = Evaluator.get_evaluator_standard_maxcut_subgraphs(graph, p)
 
-    objective_best, angles_best = optimize_qaoa_angles(evaluator, num_restarts=1)
+    evaluator = Evaluator.get_evaluator_general_z1_analytical_reduced(graph)
+
+    # objective_best, angles_best = optimize_qaoa_angles(evaluator, num_restarts=1)
+    starting_point = np.ones((evaluator.num_angles, )) * np.pi / 4
+    objective_best, angles_best = optimize_qaoa_angles(evaluator, starting_point=starting_point)
     print(f'Best achieved objective: {objective_best}')
     print(f'Maximizing angles: {repr(angles_best / np.pi)}')
 
@@ -162,6 +184,7 @@ if __name__ == '__main__':
 
     # add_graph()
     # run_point()
-    run_optimization()
+    # run_optimization()
     # run_optimization_combo()
-    # run_draw()
+    run_draw()
+    # run_gradient()
