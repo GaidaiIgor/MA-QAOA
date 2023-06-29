@@ -57,6 +57,8 @@ def linear_ramp(params: ndarray, p: int) -> ndarray:
     :param p: Number of QAOA layers.
     :return: 1D array of corresponding QAOA angles.
     """
+    # gammas = np.linspace(max(params[:2]), min(params[:2]), p)
+    # betas = np.linspace(min(params[2:]), max(params[2:]), p)
     gammas = np.linspace(params[0], params[1], p)
     betas = np.linspace(params[2], params[3], p)
     qaoa_angles = np.array(list(it.chain(*zip(gammas, betas))))
