@@ -152,12 +152,13 @@ def change_sign(func: callable) -> callable:
     return func_changed_sign
 
 
-def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, num_restarts: int = 1) -> tuple[float, ndarray]:
+def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, num_restarts: int = 1, objective_max: float = None) -> tuple[float, ndarray]:
     """
     Wrapper around minimizer function that restarts optimization from multiple random starting points to minimize evaluator.
     :param evaluator: Evaluator instance.
     :param starting_point: Starting point for optimization. Chosen randomly if None.
     :param num_restarts: Number of random starting points to try. Has no effect if specific starting point is provided.
+    :param objective_max: Maximum achievable objective. Optimization stops if answer sufficiently close to max_objective is achieved.
     :return: Minimum found value and minimizing array of parameters.
     """
     if starting_point is not None:
@@ -179,6 +180,9 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, n
         if -result.fun > objective_best:
             objective_best = -result.fun
             angles_best = result.x
+
+        if objective_best / objective_max > 0.99:
+            break
 
     time_finish = time.perf_counter()
     logger.debug(f'Optimization done. Time elapsed: {time_finish - time_start}')

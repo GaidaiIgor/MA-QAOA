@@ -74,53 +74,54 @@ def worker_general_qaoa_sub(path: str, reader: callable, p: int):
     return path, *optimize_qaoa_angles(evaluator, num_restarts=1)
 
 
-def worker_standard_qaoa(data: tuple, reader: callable, p: int, angle_strategy: str):
-    """ data[0] - path to graph, data[1] - starting point for optimization """
-    graph = reader(data[0])
+def worker_standard_qaoa(data: tuple, reader: callable, p: int, angle_strategy: str, num_restarts: int = 1):
+    path, starting_point = data
+    graph = reader(path)
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy=angle_strategy)
-    if data[1] is None:
-        expectation, angles = optimize_qaoa_angles(evaluator, num_restarts=1)
-        # if angle_strategy == 'linear':
-        #     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy='regular')
-        #     qaoa_angles = linear_ramp(angles, p)
-        #     expectation, angles = optimize_qaoa_angles(evaluator, starting_point=qaoa_angles)
+    if starting_point is None:
+        expectation, angles = optimize_qaoa_angles(evaluator, num_restarts=num_restarts, objective_max=graph.graph['maxcut'])
+        if angle_strategy == 'linear':
+            evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy='regular')
+            qaoa_angles = linear_ramp(angles, p)
+            expectation, angles = optimize_qaoa_angles(evaluator, starting_point=qaoa_angles)
     else:
-        ma_angles = convert_angles_qaoa_to_ma(data[1], len(graph.edges), len(graph))
+        ma_angles = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
         expectation, angles = optimize_qaoa_angles(evaluator, starting_point=ma_angles)
-    return data[0], expectation / graph.graph['maxcut'], angles
+    return path, expectation / graph.graph['maxcut'], angles
 
 
 def worker_relaxation(data: tuple, reader: callable, p: int, angle_strategy: str):
-    """ data[0] - path to graph, data[1] - starting point for optimization (linear to regular, or regular to ma). """
-    graph = reader(data[0])
+    path, starting_point = data
+    graph = reader(path)
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy=angle_strategy)
     if angle_strategy == 'regular':
-        starting_angles = linear_ramp(data[1], p)
+        starting_angles = linear_ramp(starting_point, p)
     elif angle_strategy == 'ma':
-        starting_angles = convert_angles_qaoa_to_ma(data[1], len(graph.edges), len(graph))
+        starting_angles = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
 
     expectation, angles = optimize_qaoa_angles(evaluator, starting_point=starting_angles)
-    return data[0], expectation / graph.graph['maxcut'], angles
+    return path, expectation / graph.graph['maxcut'], angles
 
 
-def select_worker_func(worker: str, reader: callable, p: int, angle_strategy: str):
+def select_worker_func(worker: str, reader: callable, p: int, angle_strategy: str, num_restarts: int = 1):
     if worker == 'general':
         worker_func = partial(worker_general_qaoa, reader=reader, p=p)
     elif worker == 'general_sub':
         worker_func = partial(worker_general_qaoa_sub, reader=reader, p=p)
     elif worker == 'standard':
-        worker_func = partial(worker_standard_qaoa, reader=reader, p=p, angle_strategy=angle_strategy)
+        worker_func = partial(worker_standard_qaoa, reader=reader, p=p, angle_strategy=angle_strategy, num_restarts=num_restarts)
     elif worker == 'relax':
         worker_func = partial(worker_relaxation, reader=reader, p=p, angle_strategy=angle_strategy)
     return worker_func
 
 
-def prepare_worker_data(input_df: DataFrame, angles_col: str):
-    paths = input_df.index
+def prepare_worker_data(input_df: DataFrame, angles_col: str, skip_col: str):
+    df = input_df.loc[input_df[skip_col] < 0.99, :]
+    paths = df.index
     if angles_col is None:
         starting_angles = [None] * len(paths)
     else:
-        starting_angles = [[float(angle) for angle in angles_str[1:-1].split()] for angles_str in input_df[angles_col]]
+        starting_angles = [[float(angle) for angle in angles_str[1:-1].split()] for angles_str in df[angles_col]]
     return list(zip(paths, starting_angles))
 
 
@@ -128,23 +129,25 @@ def get_angle_col_name(col_name: str) -> str:
     return f'{col_name}_angles'
 
 
-def optimize_expectation_parallel(input_df: DataFrame, num_workers: int, reader: callable, worker: str, p: int, angle_strategy: str, out_path: str, out_col: str,
-                                  angles_col: str = None, comparison_col: str = None):
-    worker_data = prepare_worker_data(input_df, angles_col)
-    worker_func = select_worker_func(worker, reader, p, angle_strategy)
+def optimize_expectation_parallel(input_df: DataFrame, num_workers: int, reader: callable, worker: str, p: int, angle_strategy: str, num_restarts: int, out_path: str, out_col: str,
+                                  angles_col: str = None, skip_col: str = None, comparison_col: str = None):
+    worker_data = prepare_worker_data(input_df, angles_col, skip_col)
+    worker_func = select_worker_func(worker, reader, p, angle_strategy, num_restarts)
     results = []
     with Pool(num_workers) as pool:
         for result in tqdm(pool.imap(worker_func, worker_data), total=len(worker_data), smoothing=0, ascii=' █'):
             results.append(result)
 
     out_angle_col = get_angle_col_name(out_col)
-    out_df = DataFrame(results).set_axis(['path', out_col, out_angle_col], axis=1).set_index('path').sort_index()
-    out_df = input_df.join(out_df)
+    new_df = DataFrame(results).set_axis(['path', out_col, out_angle_col], axis=1).set_index('path').sort_index()
+    out_df = pd.read_csv(out_path, index_col=0)
+    out_df.update(new_df)
+    out_df = out_df.join(new_df[new_df.columns.difference(out_df.columns)])
 
     if comparison_col is not None:
         comparison_angle_col = get_angle_col_name(comparison_col)
         for row_ind in out_df.index:
-            if out_df.loc[row_ind, comparison_col] > out_df.loc[row_ind, out_col]:
+            if np.isnan(out_df.loc[row_ind, out_col]) or out_df.loc[row_ind, out_col] < out_df.loc[row_ind, comparison_col]:
                 out_df.loc[row_ind, out_col] = out_df.loc[row_ind, comparison_col]
                 out_df.loc[row_ind, out_angle_col] = out_df.loc[row_ind, comparison_angle_col]
 
@@ -152,19 +155,21 @@ def optimize_expectation_parallel(input_df: DataFrame, num_workers: int, reader:
 
 
 def run_graphs_parallel():
-    p = 3
-    input_path = f'graphs/nodes_8/output/qaoa/linear/p_{p}/out.csv'
-    input_df = pd.read_csv(input_path, index_col=0)
+    p = 2
+    input_path = f'graphs/nodes_8/output/qaoa/random/out.csv'
     num_workers = 20
-    reader = partial(nx.read_gml, destringizer=int)
-    worker = 'relax'
+    worker = 'standard'
     angle_strategy = 'regular'
-    out_path = input_path
-    col_name = 'exp_qaoa_5'
-    angles_col = f'exp_5_angles'
-    comparison_col = None
+    num_restarts = 5
+    out_path = f'graphs/nodes_8/output/qaoa/random/out.csv'
+    col_name = f'p_{p}'
+    angles_col = None
+    skip_col = f'p_{p - 1}'
+    comparison_col = f'p_{p - 1}'
 
-    optimize_expectation_parallel(input_df, num_workers, reader, worker, p, angle_strategy, out_path, col_name, angles_col, comparison_col)
+    reader = partial(nx.read_gml, destringizer=int)
+    input_df = pd.read_csv(input_path, index_col=0)
+    optimize_expectation_parallel(input_df, num_workers, reader, worker, p, angle_strategy, num_restarts, out_path, col_name, angles_col, skip_col, comparison_col)
 
 
 if __name__ == '__main__':
