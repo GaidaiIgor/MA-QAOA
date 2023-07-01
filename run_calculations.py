@@ -36,19 +36,15 @@ def collect_results_xqaoa():
     return df_gqaoa.join(df_xqaoa)
 
 
-def extend_csv():
-    df = pd.read_csv('output.csv', index_col=0)
+def calculate_edge_diameter(df: DataFrame):
+    edge_diameters = [0] * df.shape[0]
+    for i in range(len(edge_diameters)):
+        path = df.index[i]
+        graph = nx.read_gml(path, destringizer=int)
+        edge_diameters[i] = get_edge_diameter(graph)
 
-    graph_count = 11117
-    edge_diameters = []
-    for i in range(graph_count):
-        print(i)
-        graph = nx.read_gml(f'graphs/nodes_8/{i}.gml', destringizer=int)
-        edge_diameter = get_edge_diameter(graph)
-        edge_diameters.append(edge_diameter)
-
-    df.insert(3, 'edge_diameter2', edge_diameters)
-    df.to_csv('output2.csv')
+    df['edge_diameter'] = edge_diameters
+    return df
 
 
 def worker_general_qaoa(path: str, reader: callable, p: int):
@@ -146,22 +142,21 @@ def optimize_expectation_parallel(input_df: DataFrame, num_workers: int, reader:
 
     if comparison_col is not None:
         comparison_angle_col = get_angle_col_name(comparison_col)
-        for row_ind in out_df.index:
-            if np.isnan(out_df.loc[row_ind, out_col]) or out_df.loc[row_ind, out_col] < out_df.loc[row_ind, comparison_col]:
-                out_df.loc[row_ind, out_col] = out_df.loc[row_ind, comparison_col]
-                out_df.loc[row_ind, out_angle_col] = out_df.loc[row_ind, comparison_angle_col]
+        rows = np.isnan(out_df[out_col]) | out_df[out_col] < out_df[comparison_col]
+        out_df.loc[rows, out_angle_col] = out_df.loc[rows, comparison_angle_col]
+        out_df.loc[rows, out_col] = out_df.loc[rows, comparison_col]
 
     out_df.to_csv(out_path)
 
 
 def run_graphs_parallel():
-    p = 2
-    input_path = f'graphs/nodes_8/output/qaoa/random/out.csv'
+    p = 1
+    input_path = f'graphs/nodes_8/output/ma/random/out.csv'
     num_workers = 20
     worker = 'standard'
-    angle_strategy = 'regular'
-    num_restarts = 5
-    out_path = f'graphs/nodes_8/output/qaoa/random/out.csv'
+    angle_strategy = 'ma'
+    num_restarts = 2
+    out_path = f'graphs/nodes_8/output/ma/random/out.csv'
     col_name = f'p_{p}'
     angles_col = None
     skip_col = f'p_{p - 1}'
