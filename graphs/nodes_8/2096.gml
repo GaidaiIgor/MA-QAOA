@@ -1,5 +1,5 @@
 graph [
-  maxcut 10
+  maxcut 7
   node [
     id 0
     label "0"
@@ -34,57 +34,34 @@ graph [
   ]
   edge [
     source 0
+    target 3
+  ]
+  edge [
+    source 0
     target 4
-    weight 1.0
-  ]
-  edge [
-    source 0
-    target 5
-    weight 1.0
   ]
   edge [
     source 0
     target 7
-    weight 1.0
   ]
   edge [
     source 1
-    target 5
-    weight 1.0
+    target 2
+  ]
+  edge [
+    source 1
+    target 4
   ]
   edge [
     source 1
     target 6
-    weight 1.0
   ]
   edge [
-    source 2
+    source 3
     target 5
-    weight 1.0
-  ]
-  edge [
-    source 2
-    target 7
-    weight 1.0
-  ]
-  edge [
-    source 3
-    target 6
-    weight 1.0
-  ]
-  edge [
-    source 3
-    target 7
-    weight 1.0
   ]
   edge [
     source 4
     target 6
-    weight 1.0
-  ]
-  edge [
-    source 4
-    target 7
-    weight 1.0
   ]
 ]
