@@ -69,13 +69,13 @@ def run_point():
 
 
 def run_draw():
-    graph = nx.read_gml('graphs/nodes_8/4634.gml', destringizer=int)
+    graph = nx.read_gml('graphs/all_8/4634.gml', destringizer=int)
     nx.draw(graph, with_labels=True)
     plt.show()
 
 
 def run_angle_grouping():
-    graph = nx.read_gml('graphs/nodes_8/1000.gml', destringizer=int)  # MC=8, MA1=7.577, Q2=7.342
+    graph = nx.read_gml('graphs/all_8/1000.gml', destringizer=int)  # MC=8, MA1=7.577, Q2=7.342
     # graph = read_graph_xqaoa('graphs/xqaoa/G4#128_24.csv')  # maxcut = 224, xqaoa = 222, full = 216 (516?), reduced = 210 (366)
     p = 1
 
@@ -102,7 +102,7 @@ def run_angle_grouping():
 
 
 def run_gradient():
-    graph = nx.read_gml('graphs/nodes_8/3054.gml', destringizer=int)
+    graph = nx.read_gml('graphs/all_8/3054.gml', destringizer=int)
     angles = np.array([0.250, 0.250, -0.250, -0.418, -0.250, 1.121, 0.250, 0.750]) * np.pi
 
     grad = np.zeros_like(angles)
@@ -126,7 +126,7 @@ def run_gradient():
 
 
 def run_optimization():
-    graph = nx.read_gml('graphs/nodes_8/3054.gml', destringizer=int)  # MC=8, MA1=7.577, Q2=7.342
+    graph = nx.read_gml('graphs/all_8/3054.gml', destringizer=int)  # MC=8, MA1=7.577, Q2=7.342
     # graph = read_graph_xqaoa('graphs/xqaoa/G4#128_24.csv')  # maxcut = 224, xqaoa = 222, full = 216 (516?), reduced = 210 (366)
     p = 1
     use_multi_angle = True
@@ -161,7 +161,7 @@ def run_optimization():
 
 
 def run_optimization_combo():
-    graph = nx.read_gml('graphs/nodes_8/1000.gml', destringizer=int)  # MC=8, MA1=7.577, Q1=6.712, Q2=7.342
+    graph = nx.read_gml('graphs/all_8/1000.gml', destringizer=int)  # MC=8, MA1=7.577, Q1=6.712, Q2=7.342
     p = 2
 
     evaluator_qaoa = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=False)
