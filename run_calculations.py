@@ -180,7 +180,7 @@ def optimize_expectation_parallel(input_df: DataFrame, num_workers: int, reader:
 
     if comparison_col is not None:
         comparison_angle_col = get_angle_col_name(comparison_col)
-        rows = np.isnan(out_df[out_col]) | out_df[out_col] < out_df[comparison_col]
+        rows = np.isnan(out_df[out_col]) | (out_df[out_col] < out_df[comparison_col])
         out_df.loc[rows, out_angle_col] = out_df.loc[rows, comparison_angle_col]
         out_df.loc[rows, out_col] = out_df.loc[rows, comparison_col]
 
@@ -189,8 +189,8 @@ def optimize_expectation_parallel(input_df: DataFrame, num_workers: int, reader:
 
 
 def run_graphs_parallel():
-    p = 3
-    input_path = f'graphs/nodes_8/output/qaoa/random/out.csv'
+    p = 1
+    input_path = 'graphs/nodes_9/output/qaoa/random/out.csv'
     num_workers = 20
     worker = 'standard'
     angle_strategy = 'regular'
@@ -198,7 +198,7 @@ def run_graphs_parallel():
     out_path = input_path
     starting_angles_col = None
 
-    for p in range(3, 11):
+    for p in range(2, 11):
         col_name = f'p_{p}'
         skip_col = f'p_{p - 1}'
         comparison_col = f'p_{p - 1}'

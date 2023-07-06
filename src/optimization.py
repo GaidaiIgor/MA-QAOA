@@ -184,7 +184,7 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, n
             objective_best = -result.fun
             angles_best = result.x
 
-        if objective_best / objective_max > 0.99:
+        if objective_max is not None and objective_best / objective_max > 0.99:
             break
 
     time_finish = time.perf_counter()
