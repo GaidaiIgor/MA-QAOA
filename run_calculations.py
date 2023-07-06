@@ -14,7 +14,7 @@ from pathlib import Path
 
 from src.optimization import Evaluator, optimize_qaoa_angles
 from src.graph_utils import get_edge_diameter, get_index_edge_list, read_graph_xqaoa
-from src.parameter_reduction import convert_angles_qaoa_to_ma, linear_ramp
+from src.parameter_reduction import convert_angles_qaoa_to_ma, linear_ramp, convert_angles_tqa_qaoa
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
 
 
@@ -88,9 +88,12 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, angle_strategy: 
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy=angle_strategy)
     if starting_point is None:
         expectation, angles = optimize_qaoa_angles(evaluator, num_restarts=num_restarts, objective_max=graph.graph['maxcut'])
-        if angle_strategy == 'linear':
+        if angle_strategy == 'linear' or angle_strategy == 'tqa':
+            if angle_strategy == 'linear':
+                qaoa_angles = linear_ramp(angles, p)
+            else:
+                qaoa_angles = convert_angles_tqa_qaoa(angles, p)
             evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy='regular')
-            qaoa_angles = linear_ramp(angles, p)
             expectation, angles = optimize_qaoa_angles(evaluator, starting_point=qaoa_angles)
     else:
         ma_angles = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))

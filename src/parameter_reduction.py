@@ -57,8 +57,6 @@ def linear_ramp(params: ndarray, p: int) -> ndarray:
     :param p: Number of QAOA layers.
     :return: 1D array of corresponding QAOA angles.
     """
-    # gammas = np.linspace(max(params[:2]), min(params[:2]), p)
-    # betas = np.linspace(min(params[2:]), max(params[2:]), p)
     gammas = np.linspace(params[0], params[1], p)
     betas = np.linspace(params[2], params[3], p)
     qaoa_angles = np.array(list(it.chain(*zip(gammas, betas))))
@@ -76,6 +74,32 @@ def linear_decorator(qaoa_func: callable, p: int) -> callable:
         qaoa_angles = linear_ramp(args[0], p)
         return qaoa_func(qaoa_angles, *args[1:], **kwargs)
     return linear_wrapped
+
+
+def convert_angles_tqa_qaoa(params: ndarray, p: int) -> ndarray:
+    """
+    Returns QAOA angles defined by the TQA strategy. TQA changes angles linearly from 0 to given final gamma over p layers. Beta is changed from final gamma to 0.
+    :param params: 1D array with 1 number: final gamma for the angle progression.
+    :param p: Number of QAOA layers.
+    :return: 1D array of corresponding QAOA angles.
+    """
+    gammas = np.linspace(params[0] / p, params[0], p)
+    betas = params[0] - gammas
+    qaoa_angles = np.array(list(it.chain(*zip(gammas, betas))))
+    return qaoa_angles
+
+
+def tqa_decorator(qaoa_func: callable, p: int) -> callable:
+    """
+    Translates TQA parameters to match QAOA format and calls the provided QAOA function.
+    :param qaoa_func: Function that expects QAOA angles as first parameter.
+    :param p: Number of QAOA layers.
+    :return: Adapted function that accepts angles in TQA format.
+    """
+    def tqa_wrapped(*args, **kwargs):
+        qaoa_angles = convert_angles_tqa_qaoa(args[0], p)
+        return qaoa_func(qaoa_angles, *args[1:], **kwargs)
+    return tqa_wrapped
 
 
 def qaoa_scheme_decorator(ma_qaoa_func: callable, duplication_scheme: list[ndarray]) -> callable:

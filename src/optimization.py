@@ -16,7 +16,7 @@ from numpy import ndarray
 
 import src.analytical
 from src.graph_utils import get_index_edge_list
-from src.parameter_reduction import qaoa_decorator, qaoa_scheme_decorator, linear_decorator
+from src.parameter_reduction import qaoa_decorator, qaoa_scheme_decorator, linear_decorator, tqa_decorator
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
 from src.simulation import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
 
@@ -50,6 +50,9 @@ class Evaluator:
         elif angle_strategy == 'linear':
             num_angles = 4
             ma_qaoa_func = linear_decorator(qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits), p)
+        elif angle_strategy == 'tqa':
+            num_angles = 1
+            ma_qaoa_func = tqa_decorator(qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits), p)
         return Evaluator(change_sign(ma_qaoa_func), num_angles)
 
     @staticmethod
