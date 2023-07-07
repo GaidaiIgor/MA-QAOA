@@ -84,7 +84,8 @@ def convert_angles_tqa_qaoa(params: ndarray, p: int) -> ndarray:
     :return: 1D array of corresponding QAOA angles.
     """
     gammas = np.linspace(params[0] / p, params[0], p)
-    betas = params[0] - gammas
+    # betas = params[0] - gammas
+    betas = gammas[::-1]
     qaoa_angles = np.array(list(it.chain(*zip(gammas, betas))))
     return qaoa_angles
 

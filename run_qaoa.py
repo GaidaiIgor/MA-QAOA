@@ -12,7 +12,7 @@ import tqdm
 
 from src.graph_utils import get_index_edge_list
 from src.optimization import optimize_qaoa_angles, Evaluator
-from src.parameter_reduction import generate_all_duplication_schemes_p1_22, convert_angles_qaoa_to_ma
+from src.parameter_reduction import generate_all_duplication_schemes_p1_22, convert_angles_qaoa_to_ma, convert_angles_tqa_qaoa
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
 
 
@@ -126,7 +126,7 @@ def run_gradient():
 
 
 def run_optimization():
-    graph = nx.read_gml('graphs/all_8/3054.gml', destringizer=int)  # MC=8, MA1=7.577, Q2=7.342
+    graph = nx.read_gml('graphs/all_8/3054.gml', destringizer=int)
     # graph = read_graph_xqaoa('graphs/xqaoa/G4#128_24.csv')  # maxcut = 224, xqaoa = 222, full = 216 (516?), reduced = 210 (366)
     p = 1
     use_multi_angle = True
@@ -144,15 +144,15 @@ def run_optimization():
     # # driver_terms = [set(term) for term in it.chain(it.combinations(range(len(graph)), 1), it.combinations(range(len(graph)), 2))]
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
-    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=use_multi_angle)
+    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy='regular')
 
     # evaluator = Evaluator.get_evaluator_standard_maxcut_subgraphs(graph, p)
 
-    evaluator = Evaluator.get_evaluator_general_z1_analytical_reduced(graph)
+    # evaluator = Evaluator.get_evaluator_general_z1_analytical_reduced(graph)
 
     # objective_best, angles_best = optimize_qaoa_angles(evaluator, num_restarts=1)
-    starting_point = np.ones((evaluator.num_angles, )) * np.pi / 4
-    objective_best, angles_best = optimize_qaoa_angles(evaluator, starting_point=starting_point)
+    # starting_point = np.ones((evaluator.num_angles, )) * np.pi / 4
+    objective_best, angles_best = optimize_qaoa_angles(evaluator, num_restarts=5)
     print(f'Best achieved objective: {objective_best}')
     print(f'Maximizing angles: {repr(angles_best / np.pi)}')
 
@@ -161,18 +161,19 @@ def run_optimization():
 
 
 def run_optimization_combo():
-    graph = nx.read_gml('graphs/all_8/1000.gml', destringizer=int)  # MC=8, MA1=7.577, Q1=6.712, Q2=7.342
-    p = 2
+    graph = nx.read_gml('graphs/all_8/3054.gml', destringizer=int)
+    p = 1
 
-    evaluator_qaoa = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=False)
-    objective_qaoa, angles_qaoa = optimize_qaoa_angles(evaluator_qaoa, num_restarts=10)
+    evaluator_1 = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy='tqa')
+    objective_1, angles_1 = optimize_qaoa_angles(evaluator_1, starting_point=np.array([0.5]))
+    print(f'obj: {objective_1}; angles: {angles_1}')
 
-    evaluator_ma = Evaluator.get_evaluator_standard_maxcut(graph, p, use_multi_angle=True)
-    starting_point = convert_angles_qaoa_to_ma(angles_qaoa, len(graph.edges), len(graph))
-    objective_ma, angles_ma = optimize_qaoa_angles(evaluator_ma, starting_point=starting_point)
+    evaluator_2 = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy='regular')
+    starting_point = convert_angles_tqa_qaoa(angles_1, p)
+    objective_2, angles_2 = optimize_qaoa_angles(evaluator_2, starting_point=starting_point)
 
-    print(f'QAOA: {objective_qaoa}')
-    print(f'MA-QAOA: {objective_ma}')
+    print(f'TQA: {objective_1}; {angles_1}')
+    print(f'QAOA: {objective_2}; {angles_2}')
     print('Done')
 
 
@@ -185,6 +186,6 @@ if __name__ == '__main__':
     # add_graph()
     # run_point()
     # run_optimization()
-    # run_optimization_combo()
-    run_draw()
+    run_optimization_combo()
+    # run_draw()
     # run_gradient()
