@@ -11,6 +11,7 @@ import os.path as path
 import itertools as it
 import glob
 from pathlib import Path
+from numpy import ndarray
 
 from src.optimization import Evaluator, optimize_qaoa_angles
 from src.graph_utils import get_edge_diameter, get_index_edge_list, read_graph_xqaoa
@@ -53,7 +54,7 @@ def calculate_min_p(df: DataFrame):
     p_vals = [int(col.split('_')[1]) for col in cols]
     for i in range(len(min_p)):
         row = df.iloc[i, :][cols]
-        min_p[i] = p_vals[np.where(row > 0.99)[0][0]]
+        min_p[i] = p_vals[np.where(row > 0.9995)[0][0]]
     df['min_p'] = min_p
     df['p_rel_ed'] = df['min_p'] - df['edge_diameter']
     return df
@@ -88,16 +89,18 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, angle_strategy: 
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy=angle_strategy)
     if starting_point is None:
         expectation, angles = optimize_qaoa_angles(evaluator, num_restarts=num_restarts, objective_max=graph.graph['maxcut'])
-        if angle_strategy == 'linear' or angle_strategy == 'tqa':
-            if angle_strategy == 'linear':
-                qaoa_angles = linear_ramp(angles, p)
-            else:
-                qaoa_angles = convert_angles_tqa_qaoa(angles, p)
-            evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy='regular')
-            expectation, angles = optimize_qaoa_angles(evaluator, starting_point=qaoa_angles)
     else:
-        ma_angles = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
-        expectation, angles = optimize_qaoa_angles(evaluator, starting_point=ma_angles)
+        expectation, angles = optimize_qaoa_angles(evaluator, starting_point=starting_point)
+        # angles = starting_point
+
+    if angle_strategy == 'linear' or angle_strategy == 'tqa':
+        if angle_strategy == 'linear':
+            qaoa_angles = linear_ramp(angles, p)
+        else:
+            qaoa_angles = convert_angles_tqa_qaoa(angles, p)
+        evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy='regular')
+        expectation, angles = optimize_qaoa_angles(evaluator, starting_point=qaoa_angles)
+
     return path, expectation / graph.graph['maxcut'], angles
 
 
@@ -137,18 +140,16 @@ def select_worker_func(worker: str, reader: callable, p: int, angle_strategy: st
     return worker_func
 
 
-def prepare_worker_data(input_df: DataFrame, angles_col: str, skip_col: str):
-    if skip_col is None:
+def prepare_worker_data(input_df: DataFrame, angles_col: str, rows: ndarray):
+    if rows is None:
         rows = input_df.index
-    else:
-        rows = input_df[skip_col] < 0.995
 
     df = input_df.loc[rows, :]
     paths = df.index
     if angles_col is None:
         starting_angles = [None] * len(paths)
     else:
-        starting_angles = [[float(angle) for angle in angles_str[1:-1].split()] for angles_str in df[angles_col]]
+        starting_angles = [np.array([float(angle) for angle in angles_str[1:-1].split()]) for angles_str in df[angles_col]]
     return list(zip(paths, starting_angles))
 
 
@@ -157,8 +158,8 @@ def get_angle_col_name(col_name: str) -> str:
 
 
 def optimize_expectation_parallel(input_df: DataFrame, num_workers: int, reader: callable, worker: str, p: int, angle_strategy: str, num_restarts: int, out_path: str, out_col: str,
-                                  angles_col: str = None, skip_col: str = None, comparison_col: str = None):
-    worker_data = prepare_worker_data(input_df, angles_col, skip_col)
+                                  angles_col: str = None, rows: ndarray = None, comparison_col: str = None):
+    worker_data = prepare_worker_data(input_df, angles_col, rows)
     worker_func = select_worker_func(worker, reader, p, angle_strategy, num_restarts)
     results = []
     with Pool(num_workers) as pool:
@@ -171,48 +172,50 @@ def optimize_expectation_parallel(input_df: DataFrame, num_workers: int, reader:
 
     out_angle_col = get_angle_col_name(out_col)
     new_df = DataFrame(results).set_axis(['path', out_col, out_angle_col], axis=1).set_index('path').sort_index()
-    if path.exists(out_path):
-        out_df = pd.read_csv(out_path, index_col=0)
-    else:
-        out_df = new_df
+    out_df = input_df.copy()
     out_df.update(new_df)
     out_df = out_df.join(new_df[new_df.columns.difference(out_df.columns)])
 
     if comparison_col is not None:
         comparison_angle_col = get_angle_col_name(comparison_col)
-        rows = np.isnan(out_df[out_col]) | (out_df[out_col] < out_df[comparison_col])
-        out_df.loc[rows, out_angle_col] = out_df.loc[rows, comparison_angle_col]
-        out_df.loc[rows, out_col] = out_df.loc[rows, comparison_col]
+        rows = np.isnan(out_df[out_col]) | (out_df[out_col] < input_df[comparison_col])
+        out_df.loc[rows, out_angle_col] = input_df.loc[rows, comparison_angle_col]
+        out_df.loc[rows, out_col] = input_df.loc[rows, comparison_col]
 
-    print(f'p: {p}; mean: {np.mean(out_df[out_col])}')
+    print(f'p: {p}; mean: {np.mean(out_df[out_col])}; converged: {sum(out_df[out_col] > 0.9995)}\n')
     out_df.to_csv(out_path)
 
 
 def run_graphs_parallel():
-    p = 1
-    input_path = 'graphs/nodes_9/output/qaoa/random/out.csv'
+    input_path = 'graphs/nodes_10/output/ma/random/out2.csv'
     num_workers = 20
     worker = 'standard'
-    angle_strategy = 'regular'
-    num_restarts = 5
+    angle_strategy = 'ma'
+    num_restarts = 2
     out_path = input_path
     starting_angles_col = None
+    reader = partial(nx.read_gml, destringizer=int)
 
-    for p in range(2, 11):
-        col_name = f'p_{p}'
-        skip_col = f'p_{p - 1}'
-        comparison_col = f'p_{p - 1}'
-
-        reader = partial(nx.read_gml, destringizer=int)
+    for p in range(3, 4):
         input_df = pd.read_csv(input_path, index_col=0)
-        optimize_expectation_parallel(input_df, num_workers, reader, worker, p, angle_strategy, num_restarts, out_path, col_name, starting_angles_col, skip_col, comparison_col)
+        col_name = f'p_{p}'
+        rows = (input_df['p_rel_ed'] == 1) & (input_df['edge_diameter'] == 3)
+        # comparison_col = None if p == 1 else f'p_{p - 1}'
+        comparison_col = col_name
+        optimize_expectation_parallel(input_df, num_workers, reader, worker, p, angle_strategy, num_restarts, out_path, col_name, starting_angles_col, rows, comparison_col)
+
+    # p = 10
+    # for r in range(1, 11):
+    #     col_name = f'ar_{r}'
+    #     skip_col = None if r == 1 else f'ar_{r - 1}'
+    #     comparison_col = None if r == 1 else f'ar_{r - 1}'
 
 
 def generate_graphs():
-    out_path = 'graphs/nodes_8'
+    out_path = 'graphs/nodes_7'
     num_graphs = 10000
-    nodes = 8
-    edge_prob = 0.355
+    nodes = 7
+    edge_prob = 0.31
     graphs = []
     diameters = []
     for i in range(num_graphs):
@@ -224,7 +227,7 @@ def generate_graphs():
         diameters.append(get_edge_diameter(next_graph))
     print(np.mean(diameters))
 
-    if abs(np.mean(diameters) - 4) < 1e-2:
+    if abs(np.mean(diameters) - 4) < 5e-3:
         for i in range(len(graphs)):
             nx.write_gml(graphs[i], f'{out_path}/{i}.gml')
 
@@ -235,6 +238,6 @@ if __name__ == '__main__':
     # collect_results_xqaoa()
     # extend_csv()
     run_graphs_parallel()
-
+    #
     # for i in range(1):
     #     generate_graphs()
