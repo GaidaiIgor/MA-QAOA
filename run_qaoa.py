@@ -144,7 +144,7 @@ def run_optimization():
     # # driver_terms = [set(term) for term in it.chain(it.combinations(range(len(graph)), 1), it.combinations(range(len(graph)), 2))]
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
-    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy='regular')
+    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='regular')
 
     # evaluator = Evaluator.get_evaluator_standard_maxcut_subgraphs(graph, p)
 
@@ -164,11 +164,11 @@ def run_optimization_combo():
     graph = nx.read_gml('graphs/all_8/3054.gml', destringizer=int)
     p = 1
 
-    evaluator_1 = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy='tqa')
+    evaluator_1 = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='tqa')
     objective_1, angles_1 = optimize_qaoa_angles(evaluator_1, starting_point=np.array([0.5]))
     print(f'obj: {objective_1}; angles: {angles_1}')
 
-    evaluator_2 = Evaluator.get_evaluator_standard_maxcut(graph, p, angle_strategy='regular')
+    evaluator_2 = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='regular')
     starting_point = convert_angles_tqa_qaoa(angles_1, p)
     objective_2, angles_2 = optimize_qaoa_angles(evaluator_2, starting_point=starting_point)
 

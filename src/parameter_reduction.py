@@ -102,6 +102,34 @@ def tqa_decorator(qaoa_func: callable, p: int) -> callable:
     return tqa_wrapped
 
 
+def interp_p_series(angles: ndarray) -> ndarray:
+    """
+    Interpolates p-series of QAOA angles at level p to generate good initial guess for level p + 1.
+    :param angles: A series of angles (gamma or beta) as a function of p.
+    :return: Initial guess for the series at level p + 1.
+    """
+    p = len(angles)
+    new_angles = np.zeros((p + 1, ))
+    new_angles[0] = angles[0]
+    for i in range(1, p):
+        new_angles[i] = i / p * angles[i - 1] + (1 - i / p) * angles[i]
+    new_angles[-1] = angles[-1]
+    return new_angles
+
+
+def interp_qaoa_angles(angles: ndarray) -> ndarray:
+    """
+    Interpolates QAOA angles at level p to generate a good initial guess for level p + 1.
+    The method is taken from Zhou, Wang, Choi, Pichler, Lukin; Quantum Approximate Optimization Algorithm: Performance, Mechanism, and Implementation on Near-Term Devices.
+    https://doi.org/10.1103/PhysRevX.10.021067
+    :param angles: Optimized angles at level p.
+    :return: Initial guess for level p + 1.
+    """
+    new_gammas = interp_p_series(angles[::2])
+    new_betas = interp_p_series(angles[1::2])
+    return np.array(list(it.chain(*zip(new_gammas, new_betas))))
+
+
 def qaoa_scheme_decorator(ma_qaoa_func: callable, duplication_scheme: list[ndarray]) -> callable:
     """ Test decorator that uses custom duplication schemes. """
     def qaoa_wrapped(*args, **kwargs):
