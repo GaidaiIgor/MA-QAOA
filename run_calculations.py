@@ -54,7 +54,9 @@ def calculate_min_p(df: DataFrame):
     p_vals = [int(col.split('_')[1]) for col in cols]
     for i in range(len(min_p)):
         row = df.iloc[i, :][cols]
-        min_p[i] = p_vals[np.where(row > 0.9995)[0][0]]
+        p_index = np.where(row > 0.9995)[0]
+        min_p[i] = p_vals[p_index[0]] if len(p_index) > 0 else np.inf
+
     df['min_p'] = min_p
     df['p_rel_ed'] = df['min_p'] - df['edge_diameter']
     return df
@@ -83,15 +85,16 @@ def worker_general_qaoa_sub(path: str, reader: callable, p: int):
     return path, *optimize_qaoa_angles(evaluator, num_restarts=1)
 
 
-def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: str, num_restarts: int = 1):
+def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: str, guess_format: str = None, num_restarts: int = 1):
     path, starting_point = data
     graph = reader(path)
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
     if starting_point is None:
         expectation, angles = optimize_qaoa_angles(evaluator, num_restarts=num_restarts, objective_max=graph.graph['maxcut'])
     else:
+        if search_space == 'ma' and guess_format == 'qaoa':
+            starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
         expectation, angles = optimize_qaoa_angles(evaluator, starting_point=starting_point)
-        # angles = starting_point
 
     if search_space == 'linear' or search_space == 'tqa':
         if search_space == 'linear':
@@ -104,19 +107,6 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
     return path, expectation / graph.graph['maxcut'], angles
 
 
-def worker_relaxation(data: tuple, reader: callable, p: int, search_space: str):
-    path, starting_point = data
-    graph = reader(path)
-    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
-    if search_space == 'regular':
-        starting_angles = linear_ramp(starting_point, p)
-    elif search_space == 'ma':
-        starting_angles = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
-
-    expectation, angles = optimize_qaoa_angles(evaluator, starting_point=starting_angles)
-    return path, expectation / graph.graph['maxcut'], angles
-
-
 def worker_maxcut(data: tuple, reader: callable):
     path = data[0]
     graph = reader(path)
@@ -126,15 +116,13 @@ def worker_maxcut(data: tuple, reader: callable):
     nx.write_gml(graph, path)
 
 
-def select_worker_func(worker: str, reader: callable, search_space: str, p: int, num_restarts: int = 1):
+def select_worker_func(worker: str, reader: callable, p: int, search_space: str, guess_format: str, num_restarts: int = 1):
     if worker == 'general':
         worker_func = partial(worker_general_qaoa, reader=reader, p=p)
     elif worker == 'general_sub':
         worker_func = partial(worker_general_qaoa_sub, reader=reader, p=p)
     elif worker == 'standard':
-        worker_func = partial(worker_standard_qaoa, reader=reader, p=p, search_space=search_space, num_restarts=num_restarts)
-    elif worker == 'relax':
-        worker_func = partial(worker_relaxation, reader=reader, p=p, search_space=search_space)
+        worker_func = partial(worker_standard_qaoa, reader=reader, p=p, search_space=search_space, guess_format=guess_format, num_restarts=num_restarts)
     elif worker == 'maxcut':
         worker_func = partial(worker_maxcut, reader=reader)
     return worker_func
@@ -165,9 +153,9 @@ def get_angle_col_name(col_name: str) -> str:
 
 
 def optimize_expectation_parallel(input_df: DataFrame, num_workers: int, worker: str, reader: callable, search_space: str, p: int, num_restarts: int, out_path: str, out_col: str,
-                                  initial_guess: str = None, angles_col: str = None, rows: ndarray = None, comparison_col: str = None):
+                                  initial_guess: str = None, guess_format: str = None, angles_col: str = None, rows: ndarray = None, comparison_col: str = None):
     worker_data = prepare_worker_data(input_df, initial_guess, angles_col, rows)
-    worker_func = select_worker_func(worker, reader, search_space, p, num_restarts)
+    worker_func = select_worker_func(worker, reader, p, search_space, guess_format, num_restarts)
     results = []
     with Pool(num_workers) as pool:
         for result in tqdm(pool.imap(worker_func, worker_data), total=len(worker_data), smoothing=0, ascii=' █'):
@@ -194,30 +182,35 @@ def optimize_expectation_parallel(input_df: DataFrame, num_workers: int, worker:
 
 
 def run_graphs_parallel():
-    input_path = 'graphs/nodes_8/ed_4/output/qaoa/tqa/out.csv'
+    input_path = 'graphs/nodes_10/output/ma/random/p_5/out.csv'
     num_workers = 20
     worker = 'standard'
-    search_space = 'tqa'
-    initial_guess = None
+    search_space = 'ma'
+    initial_guess = 'random'
+    guess_format = 'ma'
     num_restarts = 1
     out_path = input_path
     reader = partial(nx.read_gml, destringizer=int)
 
-    for p in range(2, 11):
-        input_df = pd.read_csv(input_path, index_col=0)
-        col_name = f'p_{p}'
-        starting_angles_col = f'p_{p - 1}_angles'
-        # rows = (input_df['p_rel_ed'] == 1) & (input_df['edge_diameter'] == 3)
-        rows = None if p == 1 else input_df[f'p_{p - 1}'] < 0.9995
-        comparison_col = None if p == 1 else f'p_{p - 1}'
-        optimize_expectation_parallel(input_df, num_workers, worker, reader, search_space, p, num_restarts, out_path, col_name, initial_guess, starting_angles_col, rows,
-                                      comparison_col)
+    # for p in range(1, 6):
+    #     input_df = pd.read_csv(input_path, index_col=0)
+    #     col_name = f'p_{p}'
+    #     starting_angles_col = f'p_{p}_angles'
+    #     # rows = (input_df['p_rel_ed'] == 1) & (input_df['edge_diameter'] == 3)
+    #     rows = None if p == 1 else input_df[f'p_{p - 1}'] < 0.9995
+    #     comparison_col = None if p == 1 else f'p_{p - 1}'
+    #     optimize_expectation_parallel(input_df, num_workers, worker, reader, search_space, p, num_restarts, out_path, col_name, initial_guess, guess_format, starting_angles_col,
+    #                                   rows, comparison_col)
 
-    # p = 10
-    # for r in range(1, 11):
-    #     col_name = f'ar_{r}'
-    #     skip_col = None if r == 1 else f'ar_{r - 1}'
-    #     comparison_col = None if r == 1 else f'ar_{r - 1}'
+    p = 5
+    starting_angles_col = None
+    for r in range(1, 11):
+        input_df = pd.read_csv(input_path, index_col=0)
+        col_name = f'r_{r}'
+        rows = None if r == 1 else input_df[f'r_{r - 1}'] < 0.9995
+        comparison_col = None if r == 1 else f'r_{r - 1}'
+        optimize_expectation_parallel(input_df, num_workers, worker, reader, search_space, p, num_restarts, out_path, col_name, initial_guess, guess_format, starting_angles_col,
+                                      rows, comparison_col)
 
 
 def generate_graphs():
@@ -241,11 +234,33 @@ def generate_graphs():
     #         nx.write_gml(graphs[i], f'{out_path}/{i}.gml')
 
 
+def merge_dfs():
+    base_path = 'graphs/nodes_10/output/ma/random'
+    r = [15, 15, 15, 15]
+    # r = [10] * 4
+    df = pd.DataFrame()
+    for p in range(1, 5):
+        next_df = pd.read_csv(f'{base_path}/p_{p}/out.csv', index_col=0)
+        next_df = next_df[[f'r_{r[p - 1]}']].set_axis([f'p_{p}'], axis=1)
+        if df.empty:
+            df = next_df
+        else:
+            df = df.join(next_df)
+    df = calculate_edge_diameter(df)
+    df = calculate_min_p(df)
+    df.to_csv(f'{base_path}/merged_r{r[0]}.csv')
+
+
 if __name__ == '__main__':
     np.set_printoptions(threshold=np.inf, linewidth=np.inf)
 
     # collect_results_xqaoa()
     # extend_csv()
+
+    # df = pd.read_csv('graphs/nodes_7/output/ma/random/merged_r5.csv', index_col=0)
+    # df = calculate_edge_diameter(df)
+    # df = calculate_min_p(df)
+
     run_graphs_parallel()
     #
     # for i in range(1):
