@@ -6,7 +6,6 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from functools import partial
 from typing import Callable
 
 import numpy as np
@@ -15,8 +14,8 @@ from networkx import Graph
 from numpy import ndarray
 
 import src.analytical
+from src.angle_strategies import qaoa_decorator, qaoa_scheme_decorator, linear_decorator, tqa_decorator
 from src.graph_utils import get_index_edge_list
-from src.parameter_reduction import qaoa_decorator, qaoa_scheme_decorator, linear_decorator, tqa_decorator
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
 from src.simulation import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
 

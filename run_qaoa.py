@@ -12,7 +12,7 @@ import tqdm
 
 from src.graph_utils import get_index_edge_list
 from src.optimization import optimize_qaoa_angles, Evaluator
-from src.parameter_reduction import generate_all_duplication_schemes_p1_22, convert_angles_qaoa_to_ma, convert_angles_tqa_qaoa
+from src.angle_strategies import generate_all_duplication_schemes_p1_22, convert_angles_qaoa_to_ma, convert_angles_tqa_qaoa
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
 
 

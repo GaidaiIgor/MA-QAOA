@@ -8,7 +8,7 @@ from matplotlib.ticker import LinearLocator
 from networkx import Graph
 
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1
-from src.parameter_reduction import qaoa_decorator
+from src.angle_strategies import qaoa_decorator
 
 
 def plot_qaoa_expectation_p1(graph: Graph, edge_list: list[tuple[int, int]] = None):
