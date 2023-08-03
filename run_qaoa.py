@@ -14,6 +14,7 @@ from src.graph_utils import get_index_edge_list
 from src.optimization import optimize_qaoa_angles, Evaluator
 from src.angle_strategies import generate_all_duplication_schemes_p1_22, convert_angles_qaoa_to_ma, convert_angles_tqa_qaoa
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
+from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit
 
 
 def add_graph():
@@ -36,14 +37,13 @@ def add_graph():
 
 
 def run_point():
-    graph = nx.read_gml('graphs/simple/n6_e6.gml', destringizer=int)
+    graph = nx.complete_graph(29)
+    # graph = nx.read_gml('graphs/simple/n6_e6.gml', destringizer=int)
     p = 1
-    # num_angles = (len(graph) + len(graph.edges)) * p
+    num_angles = (len(graph) + len(graph.edges)) * p
     # angles = np.array([-0.25, -0.25, -0.25, 0, 0, -0.25, 0, 0.25, 0.25, 0.25, 0.25, 0]) * np.pi
-    angles = np.array([-0.250, -0.084, 0.250, 0.000, 0.000, -0.180, 0.250, 0.000, 0.250, 0.159, -0.250, 0.111, -0.361, 0.102]) * np.pi
-
-    logger.debug('Preprocessing started...')
-    time_start = time.perf_counter()
+    # angles = np.array([-0.250, -0.084, 0.250, 0.000, 0.000, -0.180, 0.250, 0.000, 0.250, 0.159, -0.250, 0.111, -0.361, 0.102]) * np.pi
+    angles = np.array([np.pi / 4] * num_angles)
 
     # target_vals = evaluate_graph_cut(graph)
     # driver_term_vals = np.array([evaluate_z_term(np.array([term]), len(graph)) for term in range(len(graph))])
@@ -54,18 +54,12 @@ def run_point():
     # driver_terms = [set(term) for term in it.combinations(range(len(graph)), 1)]
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
-    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p)
-    # evaluator = Evaluator.get_evaluator_standard_maxcut_subgraphs(graph, p)
-    # evaluator = Evaluator.get_evaluator_standard_maxcut_analytical(graph)
+    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p)
+    # res = -evaluator.func(angles)
 
-    time_finish = time.perf_counter()
-    logger.debug(f'Preprocessing finished. Time elapsed: {time_finish - time_start}')
+    res = evaluate_angles_ma_qiskit(graph, p, angles)
 
-    logger.debug('Evaluation started...')
-    time_start = time.perf_counter()
-    res = evaluator.func(angles)
-    time_finish = time.perf_counter()
-    logger.debug(f'Evaluation finished. Expectation value: {-res}. Time elapsed: {time_finish - time_start}')
+    print(f'Expectation: {res}')
 
 
 def run_draw():
@@ -126,7 +120,8 @@ def run_gradient():
 
 
 def run_optimization():
-    graph = nx.read_gml('graphs/all_8/3054.gml', destringizer=int)
+    graph = nx.complete_graph(8)
+    # graph = nx.read_gml('graphs/nodes_10/0.gml', destringizer=int)
     # graph = read_graph_xqaoa('graphs/xqaoa/G4#128_24.csv')  # maxcut = 224, xqaoa = 222, full = 216 (516?), reduced = 210 (366)
     p = 1
     use_multi_angle = True
@@ -144,15 +139,15 @@ def run_optimization():
     # # driver_terms = [set(term) for term in it.chain(it.combinations(range(len(graph)), 1), it.combinations(range(len(graph)), 2))]
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
-    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='regular')
+    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='ma')
 
     # evaluator = Evaluator.get_evaluator_standard_maxcut_subgraphs(graph, p)
 
     # evaluator = Evaluator.get_evaluator_general_z1_analytical_reduced(graph)
 
     # objective_best, angles_best = optimize_qaoa_angles(evaluator, num_restarts=1)
-    # starting_point = np.ones((evaluator.num_angles, )) * np.pi / 4
-    objective_best, angles_best = optimize_qaoa_angles(evaluator, num_restarts=5)
+    starting_point = np.ones((evaluator.num_angles, )) * np.pi / 8
+    objective_best, angles_best = optimize_qaoa_angles(evaluator, starting_point=starting_point)
     print(f'Best achieved objective: {objective_best}')
     print(f'Maximizing angles: {repr(angles_best / np.pi)}')
 
@@ -183,9 +178,12 @@ if __name__ == '__main__':
     # logger.setLevel(logging.DEBUG)
     np.set_printoptions(linewidth=160, formatter={'float': lambda x: '{:.3f}'.format(x)})
 
+    start = time.perf_counter()
     # add_graph()
-    # run_point()
+    run_point()
     # run_optimization()
-    run_optimization_combo()
+    # run_optimization_combo()
     # run_draw()
     # run_gradient()
+    end = time.perf_counter()
+    print(f'Elapsed time: {end - start}')
