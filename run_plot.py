@@ -1,9 +1,9 @@
 """
 Contains plot functions.
 """
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import cm
+import pandas as pd
+from matplotlib import cm, pyplot as plt
 from matplotlib.ticker import LinearLocator
 from networkx import Graph
 
@@ -34,9 +34,32 @@ def plot_qaoa_expectation_p1(graph: Graph, edge_list: list[tuple[int, int]] = No
     return surf
 
 
-def main():
-    pass
+def plot_edge_diameter_vs_min_p():
+    df = pd.read_csv('graphs/nodes_7/output/ma/random/out.csv', index_col=0)
+    plt.plot(df['min_p'], df['edge_diameter'])
+    plt.xlabel('Minimum p')
+    plt.ylabel('Edge diameter')
+    plt.show()
+
+
+def plot_edge_diameter_vs_min_p_2():
+    df = pd.read_csv('graphs/nodes_7/output/ma/random/out.csv', index_col=0)
+    plt.hist2d(df['min_p'], df['edge_diameter'])
+    plt.xlabel('Minimum p')
+    plt.ylabel('Edge diameter')
+    plt.show()
+
+
+def plot_edge_diameter_vs_min_p_3():
+    p = 3
+    df = pd.read_csv('graphs/nodes_7/output/ma/random/out.csv', index_col=0)
+    eds = np.unique(df['edge_diameter'])
+    counts = [sum((df['edge_diameter'] == ed) & (df['min_p'] == p)) for ed in eds]
+    plt.plot(eds, counts)
+    plt.xlabel('Edge diameter')
+    plt.ylabel('# of converged graphs')
+    plt.show()
 
 
 if __name__ == "__main__":
-    main()
+    plot_edge_diameter_vs_min_p_3()

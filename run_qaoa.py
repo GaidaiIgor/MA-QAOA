@@ -14,7 +14,7 @@ from src.graph_utils import get_index_edge_list
 from src.optimization import optimize_qaoa_angles, Evaluator
 from src.angle_strategies import generate_all_duplication_schemes_p1_22, convert_angles_qaoa_to_ma, convert_angles_tqa_qaoa
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
-from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit
+from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit, optimize_angles_ma_qiskit
 
 
 def add_graph():
@@ -57,7 +57,7 @@ def run_point():
     # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p)
     # res = -evaluator.func(angles)
 
-    res = evaluate_angles_ma_qiskit(graph, p, angles)
+    res = evaluate_angles_ma_qiskit(angles, graph, p)
 
     print(f'Expectation: {res}')
 
@@ -120,11 +120,9 @@ def run_gradient():
 
 
 def run_optimization():
-    graph = nx.complete_graph(8)
-    # graph = nx.read_gml('graphs/nodes_10/0.gml', destringizer=int)
-    # graph = read_graph_xqaoa('graphs/xqaoa/G4#128_24.csv')  # maxcut = 224, xqaoa = 222, full = 216 (516?), reduced = 210 (366)
+    graph = nx.complete_graph(13)
     p = 1
-    use_multi_angle = True
+    search_space = 'ma'
 
     # target_vals = evaluate_graph_cut(graph)
     # edges = [edge for edge in get_index_edge_list(graph)]
@@ -139,17 +137,18 @@ def run_optimization():
     # # driver_terms = [set(term) for term in it.chain(it.combinations(range(len(graph)), 1), it.combinations(range(len(graph)), 2))]
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
-    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='ma')
+    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
 
-    # evaluator = Evaluator.get_evaluator_standard_maxcut_subgraphs(graph, p)
-
-    # evaluator = Evaluator.get_evaluator_general_z1_analytical_reduced(graph)
+    evaluator = Evaluator.get_evaluator_qiskit_fast(graph, p, search_space)
 
     # objective_best, angles_best = optimize_qaoa_angles(evaluator, num_restarts=1)
     starting_point = np.ones((evaluator.num_angles, )) * np.pi / 8
     objective_best, angles_best = optimize_qaoa_angles(evaluator, starting_point=starting_point)
+
+    # objective_best = optimize_angles_ma_qiskit(graph, p)
+
     print(f'Best achieved objective: {objective_best}')
-    print(f'Maximizing angles: {repr(angles_best / np.pi)}')
+    # print(f'Maximizing angles: {repr(angles_best / np.pi)}')
 
     # expectations = calc_per_edge_expectation(angles_best, driver_term_vals, p, graph, use_multi_angle=use_multi_angle)
     print('Done')
@@ -180,8 +179,8 @@ if __name__ == '__main__':
 
     start = time.perf_counter()
     # add_graph()
-    run_point()
-    # run_optimization()
+    # run_point()
+    run_optimization()
     # run_optimization_combo()
     # run_draw()
     # run_gradient()

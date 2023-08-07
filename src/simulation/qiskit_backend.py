@@ -1,6 +1,7 @@
 import time
 
 import networkx as nx
+import numpy as np
 from networkx import Graph
 from numpy import ndarray
 from qiskit import QuantumCircuit
@@ -8,8 +9,8 @@ from qiskit.algorithms.minimum_eigensolvers import VQE
 from qiskit.circuit import ParameterVector
 from qiskit.primitives import Estimator
 from qiskit.quantum_info import Pauli, SparsePauliOp
-from scipy import optimize
 from qiskit_aer.primitives import Estimator as AerEstimator
+from scipy import optimize
 
 from src.graph_utils import get_index_edge_list
 
@@ -37,14 +38,14 @@ def get_ma_ansatz(graph: Graph, p: int) -> QuantumCircuit:
     return circuit
 
 
-def get_observable_negative_maxcut(graph: Graph) -> SparsePauliOp:
+def get_observable_maxcut(graph: Graph) -> SparsePauliOp:
     """
-    Returns negative MaxCut Hamiltonian for minimization.
+    Returns MaxCut Hamiltonian.
     :param graph: Graph for maxcut.
     :return: MaxCut Hamiltonian.
     """
     edges = get_index_edge_list(graph)
-    return SparsePauliOp.from_sparse_list([('', [], -edges.shape[0] / 2)] + [('ZZ', list(edge), 0.5) for edge in edges], len(graph))
+    return SparsePauliOp.from_sparse_list([('', [], edges.shape[0] / 2)] + [('ZZ', list(edge), -0.5) for edge in edges], len(graph))
 
 
 def optimize_angles_ma_qiskit(graph: Graph, p: int) -> float:
@@ -55,26 +56,35 @@ def optimize_angles_ma_qiskit(graph: Graph, p: int) -> float:
     :return: Optimized cut expectation value.
     """
     estimator = Estimator()
+    # estimator = AerEstimator(approximation=True, run_options={'shots': None})
     ansatz = get_ma_ansatz(graph, p)
     optimizer = optimize.minimize
-    vqe = VQE(estimator, ansatz, optimizer)
-    maxcut_hamiltonian = get_observable_negative_maxcut(graph)
-    result = vqe.compute_minimum_eigenvalue(maxcut_hamiltonian)
+    starting_point = np.ones((ansatz.num_parameters,)) * np.pi / 8
+    vqe = VQE(estimator, ansatz, optimizer, initial_point=starting_point)
+    maxcut_hamiltonian = get_observable_maxcut(graph)
+    result = vqe.compute_minimum_eigenvalue(-maxcut_hamiltonian)
     return -result.eigenvalue.real
 
 
-def evaluate_angles_ma_qiskit(graph: Graph, p: int, angles: ndarray) -> float:
-    maxcut_hamiltonian = get_observable_negative_maxcut(graph)
+def evaluate_angles_ma_qiskit_fast(angles: ndarray, ansatz: QuantumCircuit, estimator: AerEstimator, hamiltonian: SparsePauliOp) -> float:
+    bound_circuit = ansatz.bind_parameters(angles)
+    job = estimator.run(bound_circuit, hamiltonian)
+    return job.result().values
 
-    # estimator = Estimator()
-    # ansatz = get_ma_ansatz(graph, p)
-    # job = estimator.run(ansatz, maxcut_hamiltonian, angles)
 
-    estimator = AerEstimator(approximation=False, run_options={'shots': 1024})
+def evaluate_angles_ma_qiskit(angles: ndarray, graph: Graph, p: int) -> float:
+    """
+    Evaluates maxcut expectation with MA-QAOA for given angles.
+    :param angles: MA-QAOA angles.
+    :param graph: Graph for maxcut.
+    :param p: Number of QAOA layers.
+    :return: Maxcut expectation value.
+    """
+    maxcut_hamiltonian = get_observable_maxcut(graph)
+    estimator = AerEstimator(approximation=True, run_options={'shots': None})
     ansatz = get_ma_ansatz(graph, p).bind_parameters(angles)
     job = estimator.run(ansatz, maxcut_hamiltonian)
-
-    return -job.result().values
+    return job.result().values
 
 
 if __name__ == "__main__":
