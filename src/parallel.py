@@ -129,13 +129,14 @@ def numpy_str_to_array(array_string: str) -> ndarray:
     return np.array([float(item) for item in array_string[1:-1].split()])
 
 
-def prepare_worker_data(input_df: DataFrame, initial_guess: str, angles_col: str = None, rows: ndarray = None):
+def prepare_worker_data(input_df: DataFrame, rows: ndarray, initial_guess: str, angles_col: str, p: int) -> list[tuple]:
     """
     Prepares input data for workers.
     :param input_df: Dataframe with input data.
+    :param rows: Array that identifies which rows of input_df should be considered.
     :param initial_guess: Initial guess strategy (random, explicit or interp).
     :param angles_col: Name of column in input_df with initial angles for optimization.
-    :param rows: Array that identifies which rows of input_df should be considered.
+    :param p: Value of p for the initial angles.
     :return: List of tuples with worker data.
     """
     if rows is None:
@@ -146,7 +147,7 @@ def prepare_worker_data(input_df: DataFrame, initial_guess: str, angles_col: str
     if initial_guess == 'explicit' or initial_guess == 'interp':
         starting_angles = [numpy_str_to_array(angles_str) for angles_str in df[angles_col]]
         if initial_guess == 'interp':
-            starting_angles = [interp_qaoa_angles(angles) for angles in starting_angles]
+            starting_angles = [interp_qaoa_angles(angles, p) for angles in starting_angles]
     else:
         starting_angles = [None] * len(paths)
 
@@ -162,28 +163,28 @@ def get_angle_col_name(col_name: str) -> str:
     return f'{col_name}_angles'
 
 
-def optimize_expectation_parallel(input_df: DataFrame, num_workers: int, worker: str, reader: callable, search_space: str, p: int, num_restarts: int, out_path: str, out_col: str,
-                                  initial_guess: str = None, guess_format: str = None, angles_col: str = None, rows: ndarray = None, comparison_col: str = None):
+def optimize_expectation_parallel(input_df: DataFrame, rows: ndarray, num_workers: int, worker: str, reader: callable, search_space: str, p: int, initial_guess: str,
+                                  guess_format: str, angles_col: str, num_restarts: int, copy_col: str | None, copy_better: bool, out_path: str, out_col: str):
     """
     Optimizes cut expectation for a given set of graphs in parallel and writes the output dataframe.
     :param input_df: Input dataframe with information about jobs.
+    :param rows: Array that identifies which rows of input_df should be considered.
     :param num_workers: Number of parallel workers.
     :param worker: Worker name.
     :param reader: Function that reads graph from the file.
     :param search_space: Name of angle search space (ma, qaoa, linear, tqa).
     :param p: Number of QAOA layers.
-    :param num_restarts: Number of restarts for optimization when starting from random angles.
-    :param out_path: Path where the output dataframe should be written.
-    :param out_col: Name of the column in output dataframe with calculated expectation values.
     :param initial_guess: Initial guess strategy (random, explicit or interp).
     :param guess_format: Name of format of starting point (same options as for search space).
     :param angles_col: Name of column in input_df with initial angles for optimization.
-    :param rows: Array that identifies which rows of input_df should be considered.
-    :param comparison_col: Name of the column that should be used for comparison with the currently computed expectation. If larger, the expectation from this column is retained
-    instead of the computed expectation.
+    :param num_restarts: Number of restarts for optimization when starting from random angles.
+    :param copy_col: Name of the column from where expectation should be copied if it was not calculated in the current round (=None).
+    :param copy_better: If true, better expectation values will also be copied from copy_col.
+    :param out_path: Path where the output dataframe should be written.
+    :param out_col: Name of the column in output dataframe with calculated expectation values.
     :return: None.
     """
-    worker_data = prepare_worker_data(input_df, initial_guess, angles_col, rows)
+    worker_data = prepare_worker_data(input_df, rows, initial_guess, angles_col, p - 1)
     worker_func = select_worker_func(worker, reader, p, search_space, guess_format, num_restarts)
     results = []
     with Pool(num_workers) as pool:
@@ -200,11 +201,13 @@ def optimize_expectation_parallel(input_df: DataFrame, num_workers: int, worker:
     out_df.update(new_df)
     out_df = out_df.join(new_df[new_df.columns.difference(out_df.columns)])
 
-    if comparison_col is not None:
-        comparison_angle_col = get_angle_col_name(comparison_col)
-        rows = np.isnan(out_df[out_col]) | (out_df[out_col] < input_df[comparison_col])
-        out_df.loc[rows, out_angle_col] = input_df.loc[rows, comparison_angle_col]
-        out_df.loc[rows, out_col] = input_df.loc[rows, comparison_col]
+    if copy_col is not None:
+        copy_rows = np.isnan(out_df[out_col])
+        if copy_better:
+            copy_rows = copy_rows | (out_df[out_col] < input_df[copy_col])
+        comparison_angle_col = get_angle_col_name(copy_col)
+        out_df.loc[copy_rows, out_angle_col] = input_df.loc[copy_rows, comparison_angle_col]
+        out_df.loc[copy_rows, out_col] = input_df.loc[copy_rows, copy_col]
 
     print(f'p: {p}; mean: {np.mean(out_df[out_col])}; converged: {sum(out_df[out_col] > 0.9995)}\n')
     out_df.to_csv(out_path)

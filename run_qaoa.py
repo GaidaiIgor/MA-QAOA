@@ -37,7 +37,7 @@ def add_graph():
 
 
 def run_point():
-    graph = nx.complete_graph(29)
+    graph = nx.complete_graph(15)
     # graph = nx.read_gml('graphs/simple/n6_e6.gml', destringizer=int)
     p = 1
     num_angles = (len(graph) + len(graph.edges)) * p
@@ -138,17 +138,15 @@ def run_optimization():
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
     # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
-
     evaluator = Evaluator.get_evaluator_qiskit_fast(graph, p, search_space)
 
-    # objective_best, angles_best = optimize_qaoa_angles(evaluator, num_restarts=1)
     starting_point = np.ones((evaluator.num_angles, )) * np.pi / 8
     objective_best, angles_best = optimize_qaoa_angles(evaluator, starting_point=starting_point)
 
     # objective_best = optimize_angles_ma_qiskit(graph, p)
 
     print(f'Best achieved objective: {objective_best}')
-    # print(f'Maximizing angles: {repr(angles_best / np.pi)}')
+    print(f'Maximizing angles: {repr(angles_best / np.pi)}')
 
     # expectations = calc_per_edge_expectation(angles_best, driver_term_vals, p, graph, use_multi_angle=use_multi_angle)
     print('Done')

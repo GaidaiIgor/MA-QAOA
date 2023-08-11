@@ -17,35 +17,35 @@ def collect_results_xqaoa():
 
 
 def run_graphs_parallel():
-    input_path = 'graphs/nodes_10/output/ma/random/p_5/out.csv'
+    input_path = 'graphs/nodes_8/ed_4/output/ma/interp/out.csv'
     num_workers = 20
     worker = 'standard'
     search_space = 'ma'
-    initial_guess = 'random'
+    initial_guess = 'interp'
     guess_format = 'ma'
     num_restarts = 1
     out_path = input_path
     reader = partial(nx.read_gml, destringizer=int)
+    copy_better = False
 
-    # for p in range(1, 6):
-    #     input_df = pd.read_csv(input_path, index_col=0)
-    #     col_name = f'p_{p}'
-    #     starting_angles_col = f'p_{p}_angles'
-    #     # rows = (input_df['p_rel_ed'] == 1) & (input_df['edge_diameter'] == 3)
-    #     rows = None if p == 1 else input_df[f'p_{p - 1}'] < 0.9995
-    #     comparison_col = None if p == 1 else f'p_{p - 1}'
-    #     optimize_expectation_parallel(input_df, num_workers, worker, reader, search_space, p, num_restarts, out_path, col_name, initial_guess, guess_format, starting_angles_col,
-    #                                   rows, comparison_col)
-
-    p = 5
-    starting_angles_col = None
-    for r in range(1, 11):
+    for p in range(2, 6):
         input_df = pd.read_csv(input_path, index_col=0)
-        col_name = f'r_{r}'
-        rows = None if r == 1 else input_df[f'r_{r - 1}'] < 0.9995
-        comparison_col = None if r == 1 else f'r_{r - 1}'
-        optimize_expectation_parallel(input_df, num_workers, worker, reader, search_space, p, num_restarts, out_path, col_name, initial_guess, guess_format, starting_angles_col,
-                                      rows, comparison_col)
+        out_col_name = f'p_{p}'
+        starting_angles_col = f'p_{p - 1}_angles'
+        rows = None if p == 1 else input_df[f'p_{p - 1}'] < 0.9995
+        copy_col = None if p == 1 else f'p_{p - 1}'
+        optimize_expectation_parallel(input_df, rows, num_workers, worker, reader, search_space, p, initial_guess, guess_format, starting_angles_col, num_restarts, copy_col,
+                                      copy_better, out_path, out_col_name)
+
+    # p = 5
+    # starting_angles_col = None
+    # for r in range(1, 11):
+    #     input_df = pd.read_csv(input_path, index_col=0)
+    #     out_col_name = f'r_{r}'
+    #     rows = None if r == 1 else input_df[f'r_{r - 1}'] < 0.9995
+    #     copy_col = None if r == 1 else f'r_{r - 1}'
+    #     optimize_expectation_parallel(input_df, rows, num_workers, worker, reader, search_space, p, initial_guess, guess_format, starting_angles_col, num_restarts, copy_col,
+    #                                   out_path, out_col_name)
 
 
 def generate_graphs():

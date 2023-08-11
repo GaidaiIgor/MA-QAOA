@@ -117,17 +117,33 @@ def interp_p_series(angles: ndarray) -> ndarray:
     return new_angles
 
 
-def interp_qaoa_angles(angles: ndarray) -> ndarray:
+# def interp_qaoa_angles(angles: ndarray) -> ndarray:
+#     """
+#     Interpolates QAOA angles at level p to generate a good initial guess for level p + 1.
+#     The method is taken from Zhou, Wang, Choi, Pichler, Lukin; Quantum Approximate Optimization Algorithm: Performance, Mechanism, and Implementation on Near-Term Devices.
+#     https://doi.org/10.1103/PhysRevX.10.021067
+#     :param angles: Optimized angles at level p.
+#     :return: Initial guess for level p + 1.
+#     """
+#     new_gammas = interp_p_series(angles[::2])
+#     new_betas = interp_p_series(angles[1::2])
+#     return np.array(list(it.chain(*zip(new_gammas, new_betas))))
+
+
+def interp_qaoa_angles(angles: ndarray, p: int) -> ndarray:
     """
-    Interpolates QAOA angles at level p to generate a good initial guess for level p + 1.
+    Interpolates (MA-)QAOA angles at level p to generate a good initial guess for level p + 1.
     The method is taken from Zhou, Wang, Choi, Pichler, Lukin; Quantum Approximate Optimization Algorithm: Performance, Mechanism, and Implementation on Near-Term Devices.
     https://doi.org/10.1103/PhysRevX.10.021067
-    :param angles: Optimized angles at level p.
+    :param angles: Level p angles.
+    :param p: Current number of QAOA layers.
     :return: Initial guess for level p + 1.
     """
-    new_gammas = interp_p_series(angles[::2])
-    new_betas = interp_p_series(angles[1::2])
-    return np.array(list(it.chain(*zip(new_gammas, new_betas))))
+    angle_series = angles.reshape((p, -1))
+    new_angle_series = np.zeros((p + 1, angle_series.shape[1]))
+    for j in range(new_angle_series.shape[1]):
+        new_angle_series[:, j] = interp_p_series(angle_series[:, j])
+    return np.squeeze(new_angle_series.reshape((1, -1)))
 
 
 def qaoa_scheme_decorator(ma_qaoa_func: callable, duplication_scheme: list[ndarray]) -> callable:

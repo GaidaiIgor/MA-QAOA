@@ -12,14 +12,19 @@ import numpy as np
 import scipy.optimize as optimize
 from networkx import Graph
 from numpy import ndarray
-from qiskit_aer.primitives import Estimator
+from qiskit_aer.primitives import Estimator as AerEstimator
+
+from qiskit.primitives import Estimator
 
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1
 from src.angle_strategies import qaoa_decorator, qaoa_scheme_decorator, linear_decorator, tqa_decorator
 from src.graph_utils import get_index_edge_list
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
 from src.simulation.naive import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
-from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit, get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast
+from src.simulation.qiskit_backend import get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast
+
+
+# from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit, get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast
 
 
 @dataclass
@@ -136,18 +141,18 @@ class Evaluator:
             num_angles = 2
         return Evaluator(change_sign(func), num_angles)
 
-    @staticmethod
-    def get_evaluator_qiskit(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
-        """
-        Returns qiskit evaluator of maxcut expectation.
-        :param graph: Graph for maxcut.
-        :param p: Number of QAOA layers.
-        :param search_space: Name of the strategy to choose the number of variable parameters.
-        :return: Evaluator that computes maxcut expectation achieved by MA-QAOA with given angles (implemented with qiskit).
-        The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
-        """
-        func = lambda angles: evaluate_angles_ma_qiskit(angles, graph, p)
-        return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
+    # @staticmethod
+    # def get_evaluator_qiskit(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
+    #     """
+    #     Returns qiskit evaluator of maxcut expectation.
+    #     :param graph: Graph for maxcut.
+    #     :param p: Number of QAOA layers.
+    #     :param search_space: Name of the strategy to choose the number of variable parameters.
+    #     :return: Evaluator that computes maxcut expectation achieved by MA-QAOA with given angles (implemented with qiskit).
+    #     The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
+    #     """
+    #     func = lambda angles: evaluate_angles_ma_qiskit(angles, graph, p)
+    #     return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
 
     @staticmethod
     def get_evaluator_qiskit_fast(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
@@ -160,7 +165,8 @@ class Evaluator:
         The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
         """
         maxcut_hamiltonian = get_observable_maxcut(graph)
-        estimator = Estimator(approximation=True, run_options={'shots': None})
+        estimator = AerEstimator(approximation=True, run_options={'shots': None})
+        # estimator = Estimator()
         ansatz = get_ma_ansatz(graph, p)
         func = lambda angles: evaluate_angles_ma_qiskit_fast(angles, ansatz, estimator, maxcut_hamiltonian)
         return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
@@ -209,15 +215,14 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, n
         else:
             next_angles = np.random.uniform(-np.pi, np.pi, len(angles_best))
 
-        result = optimize.minimize(evaluator.func, next_angles)
+        result = optimize.minimize(evaluator.func, next_angles, tol=1e-4, options={'disp': True})
         if -result.fun > objective_best:
             objective_best = -result.fun
             angles_best = result.x
 
-        if objective_max is not None and objective_best / objective_max > 0.99:
+        if objective_max is not None and objective_best / objective_max > 0.9995:
             break
 
     time_finish = time.perf_counter()
     logger.debug(f'Optimization done. Time elapsed: {time_finish - time_start}')
-    print(result.nfev)
     return objective_best, angles_best

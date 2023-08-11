@@ -126,7 +126,8 @@ def calc_expectation_general_qaoa(angles: ndarray, driver_term_vals: ndarray, p:
     :return: Expectation value of the target function in the state corresponding to the given parameters and terms.
     """
     psi = construct_qaoa_state(angles, driver_term_vals, p)
-    return calc_expectation_diagonal(psi, target_vals)
+    expectation = calc_expectation_diagonal(psi, target_vals)
+    return expectation
 
 
 def calc_expectation_general_qaoa_subsets(angles: ndarray, subsets: list[PSubset], subset_coeffs: list[float], p: int) -> float:
