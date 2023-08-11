@@ -21,7 +21,7 @@ from src.angle_strategies import qaoa_decorator, qaoa_scheme_decorator, linear_d
 from src.graph_utils import get_index_edge_list
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
 from src.simulation.naive import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
-from src.simulation.qiskit_backend import get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast
+from src.simulation.qiskit_backend import get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast, get_ma_ansatz_alt
 
 
 # from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit, get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast
@@ -167,7 +167,8 @@ class Evaluator:
         maxcut_hamiltonian = get_observable_maxcut(graph)
         estimator = AerEstimator(approximation=True, run_options={'shots': None})
         # estimator = Estimator()
-        ansatz = get_ma_ansatz(graph, p)
+        # ansatz = get_ma_ansatz(graph, p)
+        ansatz = get_ma_ansatz_alt(graph, p)
         func = lambda angles: evaluate_angles_ma_qiskit_fast(angles, ansatz, estimator, maxcut_hamiltonian)
         return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
 

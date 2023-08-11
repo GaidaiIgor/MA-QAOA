@@ -38,6 +38,31 @@ def get_ma_ansatz(graph: Graph, p: int) -> QuantumCircuit:
     return circuit
 
 
+def get_ma_ansatz_alt(graph: Graph, p: int) -> QuantumCircuit:
+    """
+    Returns parametrized MA-QAOA ansatz for VQE.
+    :param graph: Graph for maxcut.
+    :param p: Number of QAOA layers.
+    :return: Parametrized MA-QAOA ansatz for VQE.
+    """
+    edges = get_index_edge_list(graph)
+    params = ParameterVector('angles', (len(graph) + len(graph.edges)) * p)
+
+    circuit = QuantumCircuit(len(graph))
+    circuit.h(range(len(graph)))
+    ind = 0
+    for layer in range(p):
+        for edge in edges:
+            circuit.cx(edge[0], edge[1])
+            circuit.rz(2 * params[ind], edge[1])
+            circuit.cx(edge[0], edge[1])
+            ind += 1
+        for node in range(len(graph)):
+            circuit.rx(2 * params[ind], node)
+            ind += 1
+    return circuit
+
+
 def get_observable_maxcut(graph: Graph) -> SparsePauliOp:
     """
     Returns MaxCut Hamiltonian.

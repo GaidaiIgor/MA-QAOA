@@ -120,7 +120,7 @@ def run_gradient():
 
 
 def run_optimization():
-    graph = nx.complete_graph(13)
+    graph = nx.complete_graph(8)
     p = 1
     search_space = 'ma'
 
@@ -137,8 +137,8 @@ def run_optimization():
     # # driver_terms = [set(term) for term in it.chain(it.combinations(range(len(graph)), 1), it.combinations(range(len(graph)), 2))]
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
-    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
-    evaluator = Evaluator.get_evaluator_qiskit_fast(graph, p, search_space)
+    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
+    # evaluator = Evaluator.get_evaluator_qiskit_fast(graph, p, search_space)
 
     starting_point = np.ones((evaluator.num_angles, )) * np.pi / 8
     objective_best, angles_best = optimize_qaoa_angles(evaluator, starting_point=starting_point)
