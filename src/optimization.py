@@ -12,17 +12,16 @@ import numpy as np
 import scipy.optimize as optimize
 from networkx import Graph
 from numpy import ndarray
-from qiskit_aer.primitives import Estimator as AerEstimator
+# from qiskit_aer.primitives import Estimator as AerEstimator
 
-from qiskit.primitives import Estimator
+# from qiskit.primitives import Estimator
 
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1
 from src.angle_strategies import qaoa_decorator, qaoa_scheme_decorator, linear_decorator, tqa_decorator
 from src.graph_utils import get_index_edge_list
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
-from src.simulation.naive import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
-from src.simulation.qiskit_backend import get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast, get_ma_ansatz_alt
-
+from src.simulation.plain import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
+# from src.simulation.qiskit_backend import get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast, get_ma_ansatz_alt
 
 # from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit, get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast
 
@@ -154,23 +153,23 @@ class Evaluator:
     #     func = lambda angles: evaluate_angles_ma_qiskit(angles, graph, p)
     #     return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
 
-    @staticmethod
-    def get_evaluator_qiskit_fast(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
-        """
-        Returns qiskit evaluator of maxcut expectation.
-        :param graph: Graph for maxcut.
-        :param p: Number of QAOA layers.
-        :param search_space: Name of the strategy to choose the number of variable parameters.
-        :return: Evaluator that computes maxcut expectation achieved by MA-QAOA with given angles (implemented with qiskit).
-        The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
-        """
-        maxcut_hamiltonian = get_observable_maxcut(graph)
-        estimator = AerEstimator(approximation=True, run_options={'shots': None})
-        # estimator = Estimator()
-        # ansatz = get_ma_ansatz(graph, p)
-        ansatz = get_ma_ansatz_alt(graph, p)
-        func = lambda angles: evaluate_angles_ma_qiskit_fast(angles, ansatz, estimator, maxcut_hamiltonian)
-        return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
+    # @staticmethod
+    # def get_evaluator_qiskit_fast(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
+    #     """
+    #     Returns qiskit evaluator of maxcut expectation.
+    #     :param graph: Graph for maxcut.
+    #     :param p: Number of QAOA layers.
+    #     :param search_space: Name of the strategy to choose the number of variable parameters.
+    #     :return: Evaluator that computes maxcut expectation achieved by MA-QAOA with given angles (implemented with qiskit).
+    #     The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
+    #     """
+    #     maxcut_hamiltonian = get_observable_maxcut(graph)
+    #     estimator = AerEstimator(approximation=True, run_options={'shots': None})
+    #     # estimator = Estimator()
+    #     # ansatz = get_ma_ansatz(graph, p)
+    #     ansatz = get_ma_ansatz_alt(graph, p)
+    #     func = lambda angles: evaluate_angles_ma_qiskit_fast(angles, ansatz, estimator, maxcut_hamiltonian)
+    #     return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
 
     @staticmethod
     def get_evaluator_general_scheme(target_vals: ndarray, driver_term_vals: ndarray, p: int, duplication_scheme: list[ndarray]) -> Evaluator:
@@ -192,13 +191,14 @@ def change_sign(func: callable) -> callable:
     return func_changed_sign
 
 
-def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, num_restarts: int = 1, objective_max: float = None) -> tuple[float, ndarray]:
+def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, num_restarts: int = 1, objective_max: float = None, **kwargs) -> tuple[float, ndarray]:
     """
     Wrapper around minimizer function that restarts optimization from multiple random starting points to minimize evaluator.
     :param evaluator: Evaluator instance.
     :param starting_point: Starting point for optimization. Chosen randomly if None.
     :param num_restarts: Number of random starting points to try. Has no effect if specific starting point is provided.
     :param objective_max: Maximum achievable objective. Optimization stops if answer sufficiently close to max_objective is achieved.
+    :param kwargs: Keyword arguments for optimizer.
     :return: Minimum found value and minimizing array of parameters.
     """
     if starting_point is not None:
@@ -216,7 +216,7 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, n
         else:
             next_angles = np.random.uniform(-np.pi, np.pi, len(angles_best))
 
-        result = optimize.minimize(evaluator.func, next_angles, tol=1e-4, options={'disp': True})
+        result = optimize.minimize(evaluator.func, next_angles, **kwargs)
         if -result.fun > objective_best:
             objective_best = -result.fun
             angles_best = result.x

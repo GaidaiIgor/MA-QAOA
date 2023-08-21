@@ -4,6 +4,7 @@ from multiprocessing import Pool
 
 import networkx as nx
 import numpy as np
+import pandas as pd
 from numpy import ndarray
 from pandas import DataFrame
 from tqdm import tqdm
@@ -14,24 +15,26 @@ from src.angle_strategies import convert_angles_qaoa_to_ma, linear_ramp, convert
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
 
 
-def worker_general_qaoa(path: str, reader: callable, p: int):
+def worker_general_qaoa(data: tuple, reader: callable, p: int, num_restarts: int):
     """
     Worker function for Generalized QAOA.
-    :param path: Path to graph file for the worker.
+    :param data: Tuple of input data for the worker. Includes 1) Path to the input file; 2) Starting point for optimization (or None).
     :param reader: Function that reads graph from the file.
     :param p: Number of QAOA layers.
+    :param num_restarts: Number of optimization restarts.
     :return: 1) Path to processed file; 2) Approximation ratio; 3) Corresponding angles.
     """
+    path, starting_point = data
     graph = reader(path)
     target_vals = evaluate_graph_cut(graph)
     driver_term_vals = np.array([evaluate_z_term(np.array(term), len(graph)) for term in it.combinations(range(len(graph)), 1)])
 
-    driver_term_vals_2 = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
-    # driver_term_vals_2 = np.array([evaluate_z_term(np.array(term), len(graph)) for term in it.combinations(range(len(graph)), 2)])
-    driver_term_vals = np.append(driver_term_vals, driver_term_vals_2, axis=0)
+    # driver_term_vals_2 = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
+    # # driver_term_vals_2 = np.array([evaluate_z_term(np.array(term), len(graph)) for term in it.combinations(range(len(graph)), 2)])
+    # driver_term_vals = np.append(driver_term_vals, driver_term_vals_2, axis=0)
 
     evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p)
-    expectation, angles = optimize_qaoa_angles(evaluator, num_restarts=1)
+    expectation, angles = optimize_qaoa_angles(evaluator, num_restarts=num_restarts)
     return path, expectation / graph.graph['maxcut'], angles
 
 
@@ -110,7 +113,7 @@ def select_worker_func(worker: str, reader: callable, p: int, search_space: str,
     :return: Bound worker function.
     """
     if worker == 'general':
-        worker_func = partial(worker_general_qaoa, reader=reader, p=p)
+        worker_func = partial(worker_general_qaoa, reader=reader, p=p, num_restarts=num_restarts)
     elif worker == 'general_sub':
         worker_func = partial(worker_general_qaoa_sub, reader=reader, p=p)
     elif worker == 'standard':
@@ -163,12 +166,12 @@ def get_angle_col_name(col_name: str) -> str:
     return f'{col_name}_angles'
 
 
-def optimize_expectation_parallel(input_df: DataFrame, rows: ndarray, num_workers: int, worker: str, reader: callable, search_space: str, p: int, initial_guess: str,
-                                  guess_format: str, angles_col: str, num_restarts: int, copy_col: str | None, copy_better: bool, out_path: str, out_col: str):
+def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_workers: int, worker: str, reader: callable, search_space: str, p: int, initial_guess: str,
+                                  guess_format: str, angles_col: str | None, num_restarts: int, copy_col: str | None, copy_better: bool, out_col: str):
     """
     Optimizes cut expectation for a given set of graphs in parallel and writes the output dataframe.
-    :param input_df: Input dataframe with information about jobs.
-    :param rows: Array that identifies which rows of input_df should be considered.
+    :param dataframe_path: Path to input dataframe with information about jobs.
+    :param rows_func: Function that accepts dataframe and returns boolean array identifying which rows of the dataframe should be considered.
     :param num_workers: Number of parallel workers.
     :param worker: Worker name.
     :param reader: Function that reads graph from the file.
@@ -176,15 +179,16 @@ def optimize_expectation_parallel(input_df: DataFrame, rows: ndarray, num_worker
     :param p: Number of QAOA layers.
     :param initial_guess: Initial guess strategy (random, explicit or interp).
     :param guess_format: Name of format of starting point (same options as for search space).
-    :param angles_col: Name of column in input_df with initial angles for optimization.
+    :param angles_col: Name of column in df with initial angles for optimization.
     :param num_restarts: Number of restarts for optimization when starting from random angles.
     :param copy_col: Name of the column from where expectation should be copied if it was not calculated in the current round (=None).
     :param copy_better: If true, better expectation values will also be copied from copy_col.
-    :param out_path: Path where the output dataframe should be written.
     :param out_col: Name of the column in output dataframe with calculated expectation values.
     :return: None.
     """
-    worker_data = prepare_worker_data(input_df, rows, initial_guess, angles_col, p - 1)
+    df = pd.read_csv(dataframe_path, index_col=0)
+    rows = rows_func(df)
+    worker_data = prepare_worker_data(df, rows, initial_guess, angles_col, p - 1)
     worker_func = select_worker_func(worker, reader, p, search_space, guess_format, num_restarts)
     results = []
     with Pool(num_workers) as pool:
@@ -197,17 +201,16 @@ def optimize_expectation_parallel(input_df: DataFrame, rows: ndarray, num_worker
 
     out_angle_col = get_angle_col_name(out_col)
     new_df = DataFrame(results).set_axis(['path', out_col, out_angle_col], axis=1).set_index('path').sort_index()
-    out_df = input_df.copy()
-    out_df.update(new_df)
-    out_df = out_df.join(new_df[new_df.columns.difference(out_df.columns)])
+    df.update(new_df)
+    df = df.join(new_df[new_df.columns.difference(df.columns)])
 
     if copy_col is not None:
-        copy_rows = np.isnan(out_df[out_col])
+        copy_rows = np.isnan(df[out_col])
         if copy_better:
-            copy_rows = copy_rows | (out_df[out_col] < input_df[copy_col])
+            copy_rows = copy_rows | (df[out_col] < df[copy_col])
         comparison_angle_col = get_angle_col_name(copy_col)
-        out_df.loc[copy_rows, out_angle_col] = input_df.loc[copy_rows, comparison_angle_col]
-        out_df.loc[copy_rows, out_col] = input_df.loc[copy_rows, copy_col]
+        df.loc[copy_rows, out_angle_col] = df.loc[copy_rows, comparison_angle_col]
+        df.loc[copy_rows, out_col] = df.loc[copy_rows, copy_col]
 
-    print(f'p: {p}; mean: {np.mean(out_df[out_col])}; converged: {sum(out_df[out_col] > 0.9995)}\n')
-    out_df.to_csv(out_path)
+    print(f'p: {p}; mean: {np.mean(df[out_col])}; converged: {sum(df[out_col] > 0.9995)}\n')
+    df.to_csv(dataframe_path)

@@ -37,13 +37,13 @@ def add_graph():
 
 
 def run_point():
-    graph = nx.complete_graph(15)
+    graph = nx.complete_graph(8)
     # graph = nx.read_gml('graphs/simple/n6_e6.gml', destringizer=int)
     p = 1
     num_angles = (len(graph) + len(graph.edges)) * p
     # angles = np.array([-0.25, -0.25, -0.25, 0, 0, -0.25, 0, 0.25, 0.25, 0.25, 0.25, 0]) * np.pi
     # angles = np.array([-0.250, -0.084, 0.250, 0.000, 0.000, -0.180, 0.250, 0.000, 0.250, 0.159, -0.250, 0.111, -0.361, 0.102]) * np.pi
-    angles = np.array([np.pi / 4] * num_angles)
+    angles = np.array([np.pi / 8] * num_angles)
 
     # target_vals = evaluate_graph_cut(graph)
     # driver_term_vals = np.array([evaluate_z_term(np.array([term]), len(graph)) for term in range(len(graph))])
@@ -54,10 +54,10 @@ def run_point():
     # driver_terms = [set(term) for term in it.combinations(range(len(graph)), 1)]
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
-    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p)
-    # res = -evaluator.func(angles)
+    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p)
+    res = -evaluator.func(angles)
 
-    res = evaluate_angles_ma_qiskit(angles, graph, p)
+    # res = evaluate_angles_ma_qiskit(angles, graph, p)
 
     print(f'Expectation: {res}')
 
@@ -120,7 +120,7 @@ def run_gradient():
 
 
 def run_optimization():
-    graph = nx.complete_graph(8)
+    graph = nx.complete_graph(3)
     p = 1
     search_space = 'ma'
 
@@ -137,16 +137,16 @@ def run_optimization():
     # # driver_terms = [set(term) for term in it.chain(it.combinations(range(len(graph)), 1), it.combinations(range(len(graph)), 2))]
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
-    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
+    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
     # evaluator = Evaluator.get_evaluator_qiskit_fast(graph, p, search_space)
 
-    starting_point = np.ones((evaluator.num_angles, )) * np.pi / 8
-    objective_best, angles_best = optimize_qaoa_angles(evaluator, starting_point=starting_point)
+    # starting_point = np.ones((evaluator.num_angles, )) * np.pi / 8
+    # objective_best, angles_best = optimize_qaoa_angles(evaluator, starting_point=starting_point, method='L-BFGS-B', options={'disp': True})
 
-    # objective_best = optimize_angles_ma_qiskit(graph, p)
+    objective_best = optimize_angles_ma_qiskit(graph, p)
 
     print(f'Best achieved objective: {objective_best}')
-    print(f'Maximizing angles: {repr(angles_best / np.pi)}')
+    # print(f'Maximizing angles: {repr(angles_best / np.pi)}')
 
     # expectations = calc_per_edge_expectation(angles_best, driver_term_vals, p, graph, use_multi_angle=use_multi_angle)
     print('Done')
