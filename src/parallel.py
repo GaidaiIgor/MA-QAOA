@@ -9,6 +9,7 @@ from numpy import ndarray
 from pandas import DataFrame
 from tqdm import tqdm
 
+from src.data_processing import numpy_str_to_array
 from src.graph_utils import get_index_edge_list
 from src.optimization import Evaluator, optimize_qaoa_angles
 from src.angle_strategies import convert_angles_qaoa_to_ma, linear_ramp, convert_angles_tqa_qaoa, interp_qaoa_angles
@@ -121,15 +122,6 @@ def select_worker_func(worker: str, reader: callable, p: int, search_space: str,
     elif worker == 'maxcut':
         worker_func = partial(worker_maxcut, reader=reader)
     return worker_func
-
-
-def numpy_str_to_array(array_string: str) -> ndarray:
-    """
-    Converts numpy array string representation back to array.
-    :param array_string: Numpy array string.
-    :return: Numpy array.
-    """
-    return np.array([float(item) for item in array_string[1:-1].split()])
 
 
 def prepare_worker_data(input_df: DataFrame, rows: ndarray, initial_guess: str, angles_col: str, p: int) -> list[tuple]:

@@ -4,6 +4,7 @@ from pathlib import Path
 import networkx as nx
 import numpy as np
 import pandas as pd
+from numpy import ndarray
 from pandas import DataFrame
 
 from src.graph_utils import get_edge_diameter
@@ -60,3 +61,12 @@ def calculate_min_p(df: DataFrame):
     df['min_p'] = min_p
     df['p_rel_ed'] = df['min_p'] - df['edge_diameter']
     return df
+
+
+def numpy_str_to_array(array_string: str) -> ndarray:
+    """
+    Converts numpy array string representation back to array.
+    :param array_string: Numpy array string.
+    :return: Numpy array.
+    """
+    return np.array([float(item) for item in array_string[1:-1].split()])
