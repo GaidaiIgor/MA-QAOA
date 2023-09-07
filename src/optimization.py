@@ -17,7 +17,7 @@ from numpy import ndarray
 # from qiskit.primitives import Estimator
 
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1
-from src.angle_strategies import qaoa_decorator, qaoa_scheme_decorator, linear_decorator, tqa_decorator
+from src.angle_strategies import qaoa_decorator, qaoa_scheme_decorator, linear_decorator, tqa_decorator, fix_angles
 from src.graph_utils import get_index_edge_list
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
 from src.simulation.plain import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
@@ -49,7 +49,7 @@ class Evaluator:
         """
         if search_space == 'ma':
             num_angles = (num_driver_terms + num_qubits) * p
-        elif search_space == 'regular':
+        elif search_space == 'qaoa':
             num_angles = 2 * p
             ma_qaoa_func = qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits)
         elif search_space == 'linear':
@@ -58,6 +58,8 @@ class Evaluator:
         elif search_space == 'tqa':
             num_angles = 1
             ma_qaoa_func = tqa_decorator(qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits), p)
+        else:
+            raise 'Unknown search space'
         return Evaluator(change_sign(ma_qaoa_func), num_angles)
 
     @staticmethod
@@ -170,6 +172,16 @@ class Evaluator:
     #     ansatz = get_ma_ansatz_alt(graph, p)
     #     func = lambda angles: evaluate_angles_ma_qiskit_fast(angles, ansatz, estimator, maxcut_hamiltonian)
     #     return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
+
+    def fix_params(self, inds, values):
+        """
+        Fixes specified parameters to specified values.
+        :param inds: Indices to fix.
+        :param values: Fixed values.
+        :return: None.
+        """
+        self.func = fix_angles(self.func, self.num_angles, inds, values)
+        self.num_angles -= len(inds)
 
     @staticmethod
     def get_evaluator_general_scheme(target_vals: ndarray, driver_term_vals: ndarray, p: int, duplication_scheme: list[ndarray]) -> Evaluator:

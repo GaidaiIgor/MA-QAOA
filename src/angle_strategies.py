@@ -146,6 +146,25 @@ def interp_qaoa_angles(angles: ndarray, p: int) -> ndarray:
     return np.squeeze(new_angle_series.reshape((1, -1)))
 
 
+def fix_angles(eval_func: callable, num_angles: int, inds: list[int], values: list[float]) -> callable:
+    """
+    Decorator that returns an evaluator function with specified input elements fixed to the specified values.
+    :param eval_func: Original evaluator function that accepts ndarray of angles.
+    :param num_angles: Size of array expected by the original evaluator function.
+    :param inds: Indices of elements that are to be fixed.
+    :param values: Values for the fixed elements.
+    :return: New evaluator function that expects smaller input array and augments it with the fixed elements and returns the result of the original evaluator.
+    """
+    def new_func(angles: ndarray):
+        mask = np.zeros(num_angles, dtype=bool)
+        mask[inds] = True
+        full_angles = np.zeros(num_angles)
+        full_angles[mask] = values
+        full_angles[~mask] = angles
+        return eval_func(full_angles)
+    return new_func
+
+
 def qaoa_scheme_decorator(ma_qaoa_func: callable, duplication_scheme: list[ndarray]) -> callable:
     """ Test decorator that uses custom duplication schemes. """
     def qaoa_wrapped(*args, **kwargs):

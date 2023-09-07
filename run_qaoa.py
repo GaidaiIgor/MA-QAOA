@@ -37,13 +37,16 @@ def add_graph():
 
 
 def run_point():
-    graph = nx.complete_graph(8)
-    # graph = nx.read_gml('graphs/simple/n6_e6.gml', destringizer=int)
-    p = 1
-    num_angles = (len(graph) + len(graph.edges)) * p
-    # angles = np.array([-0.25, -0.25, -0.25, 0, 0, -0.25, 0, 0.25, 0.25, 0.25, 0.25, 0]) * np.pi
-    # angles = np.array([-0.250, -0.084, 0.250, 0.000, 0.000, -0.180, 0.250, 0.000, 0.250, 0.159, -0.250, 0.111, -0.361, 0.102]) * np.pi
-    angles = np.array([np.pi / 8] * num_angles)
+    # graph = nx.complete_graph(5)
+    graph = nx.read_gml('graphs/nodes_8/ed_4/20.gml', destringizer=int)
+    p = 3
+
+    starting_point = np.array([-0.000, -0.000, 0.000, -0.000, 0.250, 0.000, 0.000, 0.000, 0.000, -0.000, 0.000, -0.250, 0.250, -0.000, 0.000, 0.500, 0.000, 0.000, -0.250, 0.000,
+                               -0.250, 0.000, 0.250, -0.000, 0.250, 0.000, 0.250, 0.250, 0.000, 0.250, 0.000, -0.250, -0.000, -0.000, 0.250, 0.250, 0.000, 0.000, 0.250, 0.000,
+                               0.250, 0.000, 0.000, 0.000, -0.250, 0.000, -0.000, 0.000, -0.000, -0.250, -0.250]) * np.pi
+
+    starting_point = np.array([-0.25, 0.5, 0.25, -0., 0.5, 0.5, 0.5, 0., 0.5, -0.25, 0.5, 0.5, -0.25, 0.5, 0., 0., -0.25, 0.25, 0.5, -0., 0.5, 0., -0.25, -0.25, 0.25, 0.25, 0.,
+                               0.25, -0.25, 0.5, 0., -0.25, 0.5, -0., 0., 0., 0., -0.25, 0.5, -0.25, -0., -0.25, 0.5, 0.5, 0., 0., -0.25, -0.25, -0.25, 0.5, 0.25]) * np.pi
 
     # target_vals = evaluate_graph_cut(graph)
     # driver_term_vals = np.array([evaluate_z_term(np.array([term]), len(graph)) for term in range(len(graph))])
@@ -55,7 +58,7 @@ def run_point():
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p)
-    res = -evaluator.func(angles)
+    res = -evaluator.func(starting_point)
 
     # res = evaluate_angles_ma_qiskit(angles, graph, p)
 
@@ -63,7 +66,7 @@ def run_point():
 
 
 def run_draw():
-    graph = nx.read_gml('graphs/all_8/4634.gml', destringizer=int)
+    graph = nx.read_gml('graphs/nodes_8/ed_4/1.gml', destringizer=int)
     nx.draw(graph, with_labels=True)
     plt.show()
 
@@ -120,8 +123,10 @@ def run_gradient():
 
 
 def run_optimization():
-    graph = nx.complete_graph(3)
-    p = 1
+    graph = nx.read_gml('graphs/nodes_8/ed_4/20.gml', destringizer=int)
+    # graph = nx.complete_graph(3)
+    # graph.add_edge(1, 4)
+    p = 3
     search_space = 'ma'
 
     # target_vals = evaluate_graph_cut(graph)
@@ -137,16 +142,47 @@ def run_optimization():
     # # driver_terms = [set(term) for term in it.chain(it.combinations(range(len(graph)), 1), it.combinations(range(len(graph)), 2))]
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
-    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
+    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
     # evaluator = Evaluator.get_evaluator_qiskit_fast(graph, p, search_space)
 
-    # starting_point = np.ones((evaluator.num_angles, )) * np.pi / 8
-    # objective_best, angles_best = optimize_qaoa_angles(evaluator, starting_point=starting_point, method='L-BFGS-B', options={'disp': True})
+    # starting_point = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,
+    #                            -0.2, -0.2, -0.2, -0, -0.2, -0.2, -0.2, -0.2]) * np.pi
 
-    objective_best = optimize_angles_ma_qiskit(graph, p)
+    # starting_point = np.array([0.25, 0.5, 0.5, 0, 0.5, 0, 0.25, -0.25, 0.5, -0.25, 0.5, -0.25, -0.25,
+    #                            -0.25, 0.25, 0.25, 0, -0.25, -0.25, 0.25, 0]) * np.pi
+
+    starting_point = np.array(
+        [2.73049202e+00, -1.57079557e+00, 8.23669261e-01, -5.37994478e-08, -1.57079787e+00, 1.57079536e+00, 1.75875056e+00, 3.01317851e+00, 1.57079581e+00, -5.13436257e-01,
+         -1.36538678e+00, -1.42626267e+00, 2.52977539e+00, -1.19945168e+00, -3.14769144e+00, 2.53652760e-01, -1.12245459e+00, 7.26598795e-01, 1.57079710e+00, -2.12580519e-01,
+         1.57079655e+00, 9.46241383e-07, -7.85398067e-01, -1.06895980e+00, -2.51324309e+00, 9.46493096e-01, 2.78648794e+00, 9.63720308e-01, 2.35619501e+00, 1.92767952e+00,
+         3.58012439e-01, 2.11307651e+00, 1.57079670e+00, -1.29482715e-01, -2.86662339e+00, 3.04281729e+00, 2.77724479e+00, -5.43541231e-01, -1.95934930e+00, -4.51499814e-01,
+         -1.11106016e-01, 2.32252708e+00, 1.26064702e+00, 1.57079668e+00, 2.85394767e+00, 1.58945341e-06, 2.66596677e+00, 2.35619394e+00, 2.30458336e+00, -1.57079535e+00,
+         9.67225912e-01])
+    starting_point = np.array(
+        [-0.25, 0.5, 0.25, -0., 0.5, 0.5, 0.5, 0., 0.5, -0.25, 0.5, 0.5, -0.25, 0.5, 0., 0., -0.25, 0.25, 0.5, -0., 0.5, 0., -0.25, -0.25, 0.25, 0.25, 0., 0.25, -0.25, 0.5, 0.,
+         -0.25, 0.5, -0., 0., 0., 0., -0.25, 0.5, -0.25, -0., -0.25, 0.5, 0.5, 0., 0., -0.25, -0.25, -0.25, 0.5, 0.25]) * np.pi
+
+    # starting_point = np.array([-0.005, -0.072, 0.000, -0.000, 0.250, 0.000, 0.081, 0.048, 0.024, -0.085, 0.079, -0.250, 0.131, -0.000, 0.001, -0.461, 0.009, 0.005, -0.187, 0.000,
+    #                            -0.250, 0.071, 0.128, -0.045, 0.184, 0.019, 0.286, 0.163, 0.000, 0.250, 0.000, -0.228, -0.072, -0.119, 0.251, 0.240, 0.054, 0.110, 0.141, 0.033, 0.250,
+    #                            0.091, 0.045, 0.000, -0.249, 0.000, -0.062, 0.000, -0.030, -0.199, -0.250])
+
+    # starting_point = np.array([-0.000, -0.000, 0.000, -0.000, 0.250, 0.000, 0.000, 0.000, 0.000, -0.000, 0.000, -0.250, 0.250, -0.000, 0.000, -0.500, 0.000, 0.000, -0.250, 0.000,
+    #    -0.250, 0.000, 0.250, -0.000, 0.250, 0.000, 0.250, 0.250, 0.000, 0.250, 0.000, -0.250, -0.000, -0.000, 0.250, 0.250, 0.000, 0.000, 0.250, 0.000, 0.250,
+    #    0.000, 0.000, 0.000, -0.250, 0.000, -0.000, 0.000, -0.000, -0.250, -0.250])
+
+    # fix_inds = [0, 1, 2]
+    # fix_vals = starting_point[fix_inds]
+    # evaluator.fix_params(fix_inds, fix_vals)
+    # mask = np.ones_like(starting_point, dtype=bool)
+    # mask[fix_inds] = False
+    # starting_point = starting_point[mask]
+
+    objective_best, angles_best = optimize_qaoa_angles(evaluator, starting_point=starting_point, method='BFGS', options={'disp': True})
+
+    # objective_best = optimize_angles_ma_qiskit(graph, p)
 
     print(f'Best achieved objective: {objective_best}')
-    # print(f'Maximizing angles: {repr(angles_best / np.pi)}')
+    print(f'Maximizing angles: {repr(angles_best / np.pi)}')
 
     # expectations = calc_per_edge_expectation(angles_best, driver_term_vals, p, graph, use_multi_angle=use_multi_angle)
     print('Done')
@@ -177,8 +213,8 @@ if __name__ == '__main__':
 
     start = time.perf_counter()
     # add_graph()
-    # run_point()
-    run_optimization()
+    run_point()
+    # run_optimization()
     # run_optimization_combo()
     # run_draw()
     # run_gradient()

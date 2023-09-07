@@ -74,7 +74,8 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
     else:
         if search_space == 'ma' and guess_format == 'qaoa':
             starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
-        expectation, angles = optimize_qaoa_angles(evaluator, starting_point=starting_point)
+        method = 'Nelder-Mead' if starting_point[-1] == 0 else 'BFGS'
+        expectation, angles = optimize_qaoa_angles(evaluator, starting_point=starting_point, method=method)
 
     if search_space == 'linear' or search_space == 'tqa':
         if search_space == 'linear':
@@ -159,7 +160,7 @@ def get_angle_col_name(col_name: str) -> str:
 
 
 def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_workers: int, worker: str, reader: callable, search_space: str, p: int, initial_guess: str,
-                                  guess_format: str, angles_col: str | None, num_restarts: int, copy_col: str | None, copy_better: bool, out_col: str):
+                                  guess_format: str, angles_col: str | None, num_restarts: int, copy_col: str | None, copy_p: int, copy_better: bool, out_col: str):
     """
     Optimizes cut expectation for a given set of graphs in parallel and writes the output dataframe.
     :param dataframe_path: Path to input dataframe with information about jobs.
@@ -174,6 +175,7 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     :param angles_col: Name of column in df with initial angles for optimization.
     :param num_restarts: Number of restarts for optimization when starting from random angles.
     :param copy_col: Name of the column from where expectation should be copied if it was not calculated in the current round (=None).
+    :param copy_p: Value of p for the copy column. If current p is different, the copied angles will be appended with 0 to keep the angle format consistent.
     :param copy_better: If true, better expectation values will also be copied from copy_col.
     :param out_col: Name of the column in output dataframe with calculated expectation values.
     :return: None.
@@ -201,7 +203,11 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
         if copy_better:
             copy_rows = copy_rows | (df[out_col] < df[copy_col])
         comparison_angle_col = get_angle_col_name(copy_col)
-        df.loc[copy_rows, out_angle_col] = df.loc[copy_rows, comparison_angle_col]
+        copy_angles = df.loc[copy_rows, comparison_angle_col].apply(lambda x: numpy_str_to_array(x))
+        if copy_p != p:
+            angles_per_layer = len(copy_angles[0]) // copy_p
+            copy_angles = [str(np.concatenate((angles, [0] * angles_per_layer))) for angles in copy_angles]
+        df.loc[copy_rows, out_angle_col] = copy_angles
         df.loc[copy_rows, out_col] = df.loc[copy_rows, copy_col]
 
     print(f'p: {p}; mean: {np.mean(df[out_col])}; converged: {sum(df[out_col] > 0.9995)}\n')
