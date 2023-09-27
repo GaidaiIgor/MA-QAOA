@@ -142,8 +142,10 @@ def prepare_worker_data(input_df: DataFrame, rows: ndarray, initial_guess: str, 
         starting_angles = [numpy_str_to_array(angles_str) for angles_str in df[angles_col]]
         if initial_guess == 'interp':
             starting_angles = [interp_qaoa_angles(angles, p) for angles in starting_angles]
-    else:
+    elif initial_guess == 'random':
         starting_angles = [None] * len(paths)
+    else:
+        raise 'Unknown guess'
 
     return list(zip(paths, starting_angles))
 
