@@ -36,15 +36,18 @@ def assign_distinct_colors(lines: list[Line]):
 
 
 def plot_general(lines: list[Line], labels: tuple[str | None, str | None] = None, tick_multiples: tuple[float | None, float | None] = None,
-                 boundaries: tuple[float | None, float | None, float | None, float | None] = None):
+                 boundaries: tuple[float | None, float | None, float | None, float | None] = None, font_size: int = 20):
     """
     Plots specified list of lines.
     :param lines: List of lines.
     :param labels: Labels for x and y axes.
     :param tick_multiples: Base multiples for ticks along x and y axes.
     :param boundaries: x min, x max, y min, y max floats defining plot boundaries.
+    :param font_size: Font size.
     :return: None.
     """
+    plt.rcParams.update({'font.size': font_size})
+
     for line in lines:
         plt.plot(line.xs, line.ys, color=line.color, marker=line.marker, linestyle=line.style, markersize=5)
 
