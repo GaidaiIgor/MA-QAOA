@@ -12,6 +12,8 @@ import numpy as np
 import scipy.optimize as optimize
 from networkx import Graph
 from numpy import ndarray
+from scipy.optimize import OptimizeResult
+
 # from qiskit_aer.primitives import Estimator as AerEstimator
 
 # from qiskit.primitives import Estimator
@@ -203,15 +205,17 @@ def change_sign(func: callable) -> callable:
     return func_changed_sign
 
 
-def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, num_restarts: int = 1, objective_max: float = None, **kwargs) -> tuple[float, ndarray]:
+def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, num_restarts: int = 1, objective_max: float = None, objective_tolerance: float = 0.9995, **kwargs) \
+        -> OptimizeResult:
     """
     Wrapper around minimizer function that restarts optimization from multiple random starting points to minimize evaluator.
     :param evaluator: Evaluator instance.
     :param starting_point: Starting point for optimization. Chosen randomly if None.
     :param num_restarts: Number of random starting points to try. Has no effect if specific starting point is provided.
     :param objective_max: Maximum achievable objective. Optimization stops if answer sufficiently close to max_objective is achieved.
+    :param objective_tolerance: Fraction of 1 that controls how close the result need to be to objective_max before optimization can be stopped.
     :param kwargs: Keyword arguments for optimizer.
-    :return: Minimum found value and minimizing array of parameters.
+    :return: Minimization result.
     """
     if starting_point is not None:
         num_restarts = 1
@@ -220,22 +224,21 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, n
     logger.debug('Optimization...')
     time_start = time.perf_counter()
 
-    angles_best = np.zeros(evaluator.num_angles)
-    objective_best = 0
+    result_best = None
     for i in range(num_restarts):
         if starting_point is not None:
             next_angles = starting_point
         else:
-            next_angles = np.random.uniform(-np.pi, np.pi, len(angles_best))
+            next_angles = np.random.uniform(-np.pi, np.pi, evaluator.num_angles)
 
         result = optimize.minimize(evaluator.func, next_angles, **kwargs)
-        if -result.fun > objective_best:
-            objective_best = -result.fun
-            angles_best = result.x
 
-        if objective_max is not None and objective_best / objective_max > 0.9995:
+        if result_best is None or result.fun < result_best.fun:
+            result_best = result
+
+        if objective_max is not None and -result_best.fun / objective_max > objective_tolerance:
             break
 
     time_finish = time.perf_counter()
     logger.debug(f'Optimization done. Time elapsed: {time_finish - time_start}')
-    return objective_best, angles_best
+    return result_best
