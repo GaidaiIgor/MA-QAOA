@@ -9,7 +9,7 @@ from numpy import ndarray
 from pandas import DataFrame
 from tqdm import tqdm
 
-from src.data_processing import numpy_str_to_array
+from src.data_processing import numpy_str_to_array, get_angle_col_name, copy_expectation_column
 from src.graph_utils import get_index_edge_list
 from src.optimization import Evaluator, optimize_qaoa_angles
 from src.angle_strategies import convert_angles_qaoa_to_ma, linear_ramp, convert_angles_tqa_qaoa, interp_qaoa_angles
@@ -70,32 +70,32 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
     graph = reader(path)
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
     if starting_point is None:
-        expectation, angles = optimize_qaoa_angles(evaluator, num_restarts=num_restarts, objective_max=graph.graph['maxcut'])
+        result = optimize_qaoa_angles(evaluator, num_restarts=num_restarts, objective_max=graph.graph['maxcut'])
+
     else:
         if search_space == 'ma' and guess_format == 'qaoa':
             starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
         method = 'Nelder-Mead' if starting_point[-1] == 0 else 'BFGS'
-        expectation, angles = optimize_qaoa_angles(evaluator, starting_point=starting_point, method=method)
+        result = optimize_qaoa_angles(evaluator, starting_point=starting_point, method=method)
 
     if search_space == 'linear' or search_space == 'tqa':
         if search_space == 'linear':
-            qaoa_angles = linear_ramp(angles, p)
+            qaoa_angles = linear_ramp(result.x, p)
         elif search_space == 'tqa':
-            qaoa_angles = convert_angles_tqa_qaoa(angles, p)
+            qaoa_angles = convert_angles_tqa_qaoa(result.x, p)
         evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='regular')
-        expectation, angles = optimize_qaoa_angles(evaluator, starting_point=qaoa_angles)
+        result = optimize_qaoa_angles(evaluator, starting_point=qaoa_angles)
 
-    return path, expectation / graph.graph['maxcut'], angles
+    return path, -result.fun / graph.graph['maxcut'], result.x, result.nfev
 
 
-def worker_maxcut(data: tuple, reader: callable):
+def worker_maxcut(path: str, reader: callable):
     """
     Worker that evaluates maxcut by brute-force and writes it to the input file as graph property.
-    :param data: Tuple of input data for the worker. Includes 1) Path to the input file.
+    :param path: Path to the input file.
     :param reader: Function that reads graph from the file.
     :return: None.
     """
-    path = data[0]
     graph = reader(path)
     cut_vals = evaluate_graph_cut(graph)
     max_cut = int(max(cut_vals))
@@ -120,8 +120,6 @@ def select_worker_func(worker: str, reader: callable, p: int, search_space: str,
         worker_func = partial(worker_general_qaoa_sub, reader=reader, p=p)
     elif worker == 'standard':
         worker_func = partial(worker_standard_qaoa, reader=reader, p=p, search_space=search_space, guess_format=guess_format, num_restarts=num_restarts)
-    elif worker == 'maxcut':
-        worker_func = partial(worker_maxcut, reader=reader)
     return worker_func
 
 
@@ -150,17 +148,22 @@ def prepare_worker_data(input_df: DataFrame, rows: ndarray, initial_guess: str, 
     return list(zip(paths, starting_angles))
 
 
-def get_angle_col_name(col_name: str) -> str:
+def calculate_maxcut_parallel(paths: list[str], num_workers: int, reader: callable):
     """
-    Returns column name with angles corresponding to expectations in a given column.
-    :param col_name: Expectation column name.
-    :return: Column name with the corresponding angles.
+    Calculates maxcut for all graphs specified in paths are writes it to the graph file.
+    :param paths: List of paths to graphs to calculate maxcut.
+    :param num_workers: Number of parallel workers.
+    :param reader: Function that reads graph from the file.
+    :return: None
     """
-    return f'{col_name}_angles'
+    worker_func = partial(worker_maxcut, reader=reader)
+    with Pool(num_workers) as pool:
+        for _ in tqdm(pool.imap(worker_func, paths), total=len(paths), smoothing=0, ascii=' █'):
+            pass
 
 
 def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_workers: int, worker: str, reader: callable, search_space: str, p: int, initial_guess: str,
-                                  guess_format: str, angles_col: str | None, num_restarts: int, copy_col: str | None, copy_p: int, copy_better: bool, out_col: str):
+                                  guess_format: str, angles_col: str | None, num_restarts: int, copy_col: str | None, copy_p: int, copy_better: bool, out_col: str) -> int:
     """
     Optimizes cut expectation for a given set of graphs in parallel and writes the output dataframe.
     :param dataframe_path: Path to input dataframe with information about jobs.
@@ -178,7 +181,7 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     :param copy_p: Value of p for the copy column. If current p is different, the copied angles will be appended with 0 to keep the angle format consistent.
     :param copy_better: If true, better expectation values will also be copied from copy_col.
     :param out_col: Name of the column in output dataframe with calculated expectation values.
-    :return: None.
+    :return: False if no new results were calculated.
     """
     df = pd.read_csv(dataframe_path, index_col=0)
     rows = rows_func(df)
@@ -190,25 +193,14 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
             if result is not None:
                 results.append(result)
 
-    if len(results) == 0:
-        return
+    if len(results) > 0:
+        out_angle_col = get_angle_col_name(out_col)
+        new_df = DataFrame(results).set_axis(['path', out_col, out_angle_col, f'{out_col}_nfev'], axis=1).set_index('path').sort_index()
+        df.update(new_df)
+        df = df.join(new_df[new_df.columns.difference(df.columns)])
+        df = copy_expectation_column(df, copy_better, copy_col, out_col, copy_p, p)
 
-    out_angle_col = get_angle_col_name(out_col)
-    new_df = DataFrame(results).set_axis(['path', out_col, out_angle_col], axis=1).set_index('path').sort_index()
-    df.update(new_df)
-    df = df.join(new_df[new_df.columns.difference(df.columns)])
+        print(f'p: {p}; mean: {np.mean(df[out_col])}; converged: {sum(df[out_col] > 0.9995)}; nfev: {np.mean(df[f"{out_col}_nfev"])}\n')
+        df.to_csv(dataframe_path)
 
-    if copy_col is not None:
-        copy_rows = np.isnan(df[out_col])
-        if copy_better:
-            copy_rows = copy_rows | (df[out_col] < df[copy_col])
-        comparison_angle_col = get_angle_col_name(copy_col)
-        copy_angles = df.loc[copy_rows, comparison_angle_col].apply(lambda x: numpy_str_to_array(x))
-        if copy_p != p:
-            angles_per_layer = len(copy_angles[0]) // copy_p
-            copy_angles = [str(np.concatenate((angles, [0] * angles_per_layer))) for angles in copy_angles]
-        df.loc[copy_rows, out_angle_col] = copy_angles
-        df.loc[copy_rows, out_col] = df.loc[copy_rows, copy_col]
-
-    print(f'p: {p}; mean: {np.mean(df[out_col])}; converged: {sum(df[out_col] > 0.9995)}\n')
-    df.to_csv(dataframe_path)
+    return len(results)
