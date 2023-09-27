@@ -153,21 +153,18 @@ def run_graph_sequential():
 
 def run_merge():
     copy_better = True
-    nodes = [7, 8, 9, 10]
-    eds = [3.5, 4.5, 5]
-    methods = ['ma']
-    ps = [list(range(1, 6))]
-    restarts = [[10] * 5]
+    nodes = [9, 10, 11, 12]
+    depths = [3, 4, 5, 6]
+    methods = ['qaoa', 'ma']
+    ps = [list(range(1, 11)), list(range(1, 6))]
+    restarts = 1
+    convergence_threshold = 0.9995
     for method_ind, method in enumerate(methods):
-        method_restarts = restarts[method_ind]
-        # for node in nodes:
-        #     extra = 'ed_4' if node == 8 else ''
-        #     base_path = f'graphs/nodes_{node}/{extra}/output/{method}/random'
-        #     merge_dfs(base_path, ps[method_ind], method_restarts, f'{base_path}/out_r{method_restarts[0]}.csv', copy_better)
-
-        for ed in eds:
-            base_path = f'graphs/nodes_8/ed_{ed:.2g}/output/{method}/random'
-            merge_dfs(base_path, ps[method_ind], method_restarts, f'{base_path}/out_r{method_restarts[0]}.csv', copy_better)
+        for node in nodes:
+            node_depths = [3] if node < 12 else depths
+            for depth in node_depths:
+                base_path = f'graphs/new/nodes_{node}/depth_{depth}/output/{method}/random'
+                merge_dfs(base_path, ps[method_ind], restarts, convergence_threshold,f'{base_path}/out_r{restarts}.csv', copy_better)
 
 
 if __name__ == '__main__':
@@ -180,7 +177,7 @@ if __name__ == '__main__':
     # df = calculate_edge_diameter(df)
     # df = calculate_min_p(df)
 
-    # run_merge()
+    run_merge()
     # generate_graphs()
     # run_graphs_init()
-    run_graphs_parallel()
+    # run_graphs_parallel()

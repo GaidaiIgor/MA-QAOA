@@ -187,12 +187,14 @@ def copy_expectation_dataframe(df: DataFrame) -> DataFrame:
     return df
 
 
-def merge_dfs(base_path: str, ps: list[int], restarts: list[int], out_name: str, copy_better: bool):
+def merge_dfs(base_path: str, ps: list[int], restarts: int, convergence_threshold: float, out_name: str, copy_better: bool):
     """
     Merges dataframes corresponding to specified values of p with specified number of restarts and writes a new merged dataframe.
     :param base_path: Path to the folder with individual p calculations.
     :param ps: List of p-values to merge
-    :param restarts: Value of number of restarts that should be taken from each p.
+    :param restarts: How many restarts should be taken from each p.
+    If the specified number of restarts is not available, but lower number of restarts is completely converged, then this number of restarts will be taken as equivalent.
+    :param convergence_threshold: Threshold AR for complete convergence.
     :param out_name: Name of the merged dataframe.
     :param copy_better: True to copy expectations from smaller p if better answer was found.
     :return: None.
@@ -200,9 +202,9 @@ def merge_dfs(base_path: str, ps: list[int], restarts: list[int], out_name: str,
     merged_df = pd.DataFrame()
     for p_ind, p in enumerate(ps):
         next_df = pd.read_csv(f'{base_path}/p_{p}/out.csv', index_col=0)
-        exp_col_name = f'r_{restarts[p_ind]}'
+        exp_col_name = f'r_{restarts}'
         calculated_restarts = extract_numbers(next_df.filter(regex=r'r_\d+$').columns)
-        if restarts[p_ind] > calculated_restarts[-1] and sum(next_df[f'r_{calculated_restarts[-1]}'] > 0.9995) == next_df.shape[0]:
+        if restarts > calculated_restarts[-1] and sum(next_df[f'r_{calculated_restarts[-1]}'] > convergence_threshold) == next_df.shape[0]:
             exp_col_name = f'r_{calculated_restarts[-1]}'
 
         angle_col_name = get_angle_col_name(exp_col_name)

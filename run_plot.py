@@ -41,14 +41,13 @@ def plot_qaoa_expectation_p1(graph: Graph, edge_list: list[tuple[int, int]] = No
 
 
 def plot_avg_ar_vs_p_r1_nodes():
-    nodes = range(7, 11)
+    nodes = range(9, 13)
     methods = ['qaoa', 'ma']
     lines = []
     for method_ind, method in enumerate(methods):
-        for color_ind, n in enumerate(nodes):
-            extra = 'ed_4' if n == 8 else ''
-            ps, p_series = get_column_average(f'graphs/nodes_{n}/{extra}/output/{method}/random/out_r1.csv', r'p_\d+$')
-            lines.append(Line(ps, p_series, colors[color_ind], markers[method_ind]))
+        for n_ind, n in enumerate(nodes):
+            ps, p_series = get_column_average(f'graphs/new/nodes_{n}/depth_3/output/{method}/random/out_r1.csv', r'p_\d+$')
+            lines.append(Line(ps, p_series, colors[n_ind], markers[method_ind]))
     plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
     plt.plot([0, 11], [1, 1], 'k--')
     plt.plot([0, 11], [0.99, 0.99], 'r--')
@@ -346,7 +345,7 @@ def plot_converged_fraction_vs_rel_p_r10_edges():
 
 
 if __name__ == "__main__":
-    # plot_avg_ar_vs_p_r1_nodes()
+    plot_avg_ar_vs_p_r1_nodes()
     # plot_avg_ar_vs_p_r1_edges()
     # plot_avg_ar_vs_p_r1_interp_nodes()
     # plot_avg_ar_vs_p_r1_interp_edges()
@@ -358,7 +357,7 @@ if __name__ == "__main__":
     # plot_converged_fraction_vs_min_p_nodes()
     # plot_converged_fraction_vs_min_p_edges()
     # plot_converged_fraction_vs_min_p_r10_nodes()
-    plot_converged_fraction_vs_min_p_r10_edges()
+    # plot_converged_fraction_vs_min_p_r10_edges()
     # plot_converged_fraction_vs_rel_p_nodes()
     # plot_converged_fraction_vs_rel_p_edges()
     # plot_converged_fraction_vs_rel_p_r10_nodes()
