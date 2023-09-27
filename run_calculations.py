@@ -1,12 +1,14 @@
 from functools import partial
+from os import path
 
 import networkx as nx
 import numpy as np
 import pandas as pd
+from pandas import DataFrame
 
-from src.data_processing import collect_results_from, calculate_edge_diameter, calculate_min_p
-from src.graph_utils import get_edge_diameter
-from src.parallel import optimize_expectation_parallel, worker_standard_qaoa
+from src.data_processing import collect_results_from, calculate_edge_diameter, calculate_min_p, merge_dfs
+from src.graph_utils import get_edge_diameter, get_max_edge_depth, find_non_isomorphic, is_isomorphic
+from src.parallel import optimize_expectation_parallel, worker_standard_qaoa, calculate_maxcut_parallel
 
 
 def collect_results_xqaoa():
@@ -16,75 +18,126 @@ def collect_results_xqaoa():
     return df_gqaoa.join(df_xqaoa)
 
 
-def run_graphs_parallel():
-    ps = list(range(1, 11))
-    for p in ps:
-        input_path = f'graphs/nodes_10/output/qaoa/random/p_{p}/out.csv'
-        num_workers = 20
-        worker = 'standard'
-        search_space = 'qaoa'
-        initial_guess = 'random'
-        guess_format = 'qaoa'
-        num_restarts = 1
-        reader = partial(nx.read_gml, destringizer=int)
-        copy_better = True
-
-        # for p in range(5, 6):
-        #     rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < 0.9995
-        #     starting_angles_col = f'p_{p}_starting_angles'
-        #     copy_p = p - 1
-        #     copy_col = None if p == 1 else f'p_{copy_p}'
-        #     out_col_name = f'p_{p}'
-        #     optimize_expectation_parallel(input_path, rows_func, num_workers, worker, reader, search_space, p, initial_guess, guess_format, starting_angles_col, num_restarts,
-        #                                   copy_col, copy_p, copy_better, out_col_name)
-
-        # p = 10
-        starting_angles_col = None
-        for r in range(1, 2):
-            out_col_name = f'r_{r}'
-            rows_func = lambda df: None if r == 1 else df[f'r_{r - 1}'] < 0.9995
-            copy_col = None if r == 1 else f'r_{r - 1}'
-            optimize_expectation_parallel(input_path, rows_func, num_workers, worker, reader, search_space, p, initial_guess, guess_format, starting_angles_col, num_restarts,
-                                          copy_col, p, copy_better, out_col_name)
-
-
 def generate_graphs():
-    out_path = 'graphs/nodes_12/'
     num_graphs = 1000
-    nodes = 12
-    edge_prob = 0.365
-    graphs = []
-    diameters = []
-    for i in range(num_graphs):
-        connected = False
-        while not connected:
-            next_graph = nx.gnp_random_graph(nodes, edge_prob)
-            connected = nx.is_connected(next_graph)
-        graphs.append(next_graph)
-        diameters.append(get_edge_diameter(next_graph))
-    print(np.mean(diameters))
-    print(np.std(diameters) / np.sqrt(num_graphs) * 2)
+    max_attempts = 10 ** 10
+    nodes = 10
+    depth = 6
+    edge_prob = 0.1
+    out_path = f'graphs/new/nodes_{nodes}/depth_{depth}'
 
-    if abs(np.mean(diameters) - 4) < 5e-3:
-        for i in range(len(graphs)):
-            nx.write_gml(graphs[i], f'{out_path}/{i}.gml')
+    graphs = np.empty(num_graphs, dtype=object)
+    graphs_generated = 0
+    for i in range(max_attempts):
+        next_graph = nx.gnp_random_graph(nodes, edge_prob)
+        if not nx.is_connected(next_graph):
+            continue
+        if get_max_edge_depth(next_graph) != depth:
+            continue
+        if is_isomorphic(next_graph, graphs[:graphs_generated]):
+            continue
+        graphs[graphs_generated] = next_graph
+        graphs_generated += 1
+        print(f'{graphs_generated}')
+        if graphs_generated == num_graphs:
+            break
+    else:
+        raise 'Failed to generate connected set'
+    print('Generation done')
+
+    # print('Calculating depth')
+    # depths = [get_max_edge_depth(graph) for graph in graphs]
+    # histogram = np.histogram(depths, bins=range(1, nodes))
+    # print(histogram)
+    # return
+
+    # print('Checking isomorphisms')
+    # isomorphisms = find_non_isomorphic(graphs)
+    # print(f'Number of non-isomorphic: {sum(isomorphisms)}')
+
+    for i in range(len(graphs)):
+        nx.write_gml(graphs[i], f'{out_path}/{i}.gml')
 
 
-def merge_dfs():
-    base_path = 'graphs/nodes_10/output/ma/random'
-    r = [15, 15, 15, 15]
-    # r = [10] * 4
-    df = pd.DataFrame()
-    for p in range(1, 5):
-        next_df = pd.read_csv(f'{base_path}/p_{p}/out.csv', index_col=0)
-        next_df = next_df[[f'r_{r[p - 1]}']].set_axis([f'p_{p}'], axis=1)
-        if df.empty:
-            df = next_df
-        else:
-            df = df.join(next_df)
-    df = calculate_edge_diameter(df)
-    df = calculate_min_p(df)
-    df.to_csv(f'{base_path}/merged_r{r[0]}.csv')
+def run_graphs_init():
+    num_graphs = 1000
+    nodes = list(range(9, 13))
+    depths = list(range(4, 7))
+    # for node in nodes:
+    #     data_path = f'graphs/new/nodes_{node}/depth_3/'
+    for depth in depths:
+        data_path = f'graphs/new/nodes_12/depth_{depth}/'
+        num_workers = 20
+        reader = partial(nx.read_gml, destringizer=int)
+        paths = [f'{data_path}/{i}.gml' for i in range(num_graphs)]
+        calculate_maxcut_parallel(paths, num_workers, reader)
+
+
+def get_out_path(data_path: str, method: str, initial_guess: str, p: int) -> str:
+    extra = f'p_{p}' if initial_guess == 'random' else ''
+    return f'{data_path}/output/{method}/{initial_guess}/{extra}/out.csv'
+
+
+def get_starting_angles_col_name(initial_guess: str, p: int) -> str | None:
+    if initial_guess == 'random':
+        return None
+    elif initial_guess == 'interp':
+        return f'p_{p - 1}_angles'
+    elif initial_guess == 'qaoa':
+        return f'p_{p}_starting_angles'
+
+
+def init_dataframe(initial_guess: str, data_path: str, num_graphs: int, out_path: str):
+    if initial_guess == 'interp':
+        df = pd.read_csv(f'{data_path}/output/qaoa/random/p_1/out.csv', index_col=0)
+        df = df.filter(regex='r_10').rename(columns=lambda name: f'p_1{name[4:]}')
+    elif initial_guess == 'qaoa':
+        df = pd.read_csv(f'{data_path}/output/qaoa/interp/out.csv', index_col=0)
+        df = df.filter(regex=r'p_\d+_angles').rename(columns=lambda name: f'{name[:-7]}_starting_angles')
+    else:
+        paths = [f'{data_path}/{i}.gml' for i in range(num_graphs)]
+        df = DataFrame(paths).set_axis(['path'], axis=1).set_index('path')
+    df.to_csv(out_path)
+
+
+def run_graphs_parallel():
+    num_graphs = 1000
+    num_workers = 20
+    num_restarts = 1
+    worker = 'standard'
+    initial_guess = 'qaoa'
+    methods = ['ma']
+    ps = {'qaoa': list(range(2, 11)), 'ma': list(range(1, 6))}
+    nodes = list(range(9, 13))
+    depths = list(range(3, 7))
+    restarts = list(range(1, 2))
+    reader = partial(nx.read_gml, destringizer=int)
+    copy_better = True
+    convergence_threshold = 0.9995
+
+    for method in methods:
+        for node in nodes:
+            node_depths = [3] if node < 12 else depths
+            for depth in node_depths:
+                for p in ps[method]:
+                    for r in restarts:
+                        search_space = method
+                        guess_format = 'qaoa' if initial_guess == 'qaoa' else method
+                        data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
+                        out_path = get_out_path(data_path, method, initial_guess, p)
+                        out_col_prefix = 'r' if initial_guess == 'random' else 'p'
+                        counter = r if out_col_prefix == 'r' else p
+                        starting_angles_col = get_starting_angles_col_name(initial_guess, p)
+                        out_col_name = f'{out_col_prefix}_{counter}'
+                        rows_func = lambda df: None if counter == 1 else df[f'{out_col_prefix}_{counter - 1}'] < convergence_threshold
+                        copy_col = None if counter == 1 else f'{out_col_prefix}_{counter - 1}'
+                        copy_p = p if out_col_prefix == 'r' else p - 1
+
+                        if not path.exists(out_path):
+                            init_dataframe(initial_guess, data_path, num_graphs, out_path)
+
+                        optimize_expectation_parallel(out_path, rows_func, num_workers, worker, reader, search_space, p, initial_guess, guess_format, starting_angles_col,
+                                                      num_restarts, copy_col, copy_p, copy_better, out_col_name)
 
 
 def run_graph_sequential():
@@ -98,6 +151,25 @@ def run_graph_sequential():
     print('Done')
 
 
+def run_merge():
+    copy_better = True
+    nodes = [7, 8, 9, 10]
+    eds = [3.5, 4.5, 5]
+    methods = ['ma']
+    ps = [list(range(1, 6))]
+    restarts = [[10] * 5]
+    for method_ind, method in enumerate(methods):
+        method_restarts = restarts[method_ind]
+        # for node in nodes:
+        #     extra = 'ed_4' if node == 8 else ''
+        #     base_path = f'graphs/nodes_{node}/{extra}/output/{method}/random'
+        #     merge_dfs(base_path, ps[method_ind], method_restarts, f'{base_path}/out_r{method_restarts[0]}.csv', copy_better)
+
+        for ed in eds:
+            base_path = f'graphs/nodes_8/ed_{ed:.2g}/output/{method}/random'
+            merge_dfs(base_path, ps[method_ind], method_restarts, f'{base_path}/out_r{method_restarts[0]}.csv', copy_better)
+
+
 if __name__ == '__main__':
     np.set_printoptions(threshold=np.inf, linewidth=np.inf)
 
@@ -108,6 +180,7 @@ if __name__ == '__main__':
     # df = calculate_edge_diameter(df)
     # df = calculate_min_p(df)
 
-    run_graphs_parallel()
-
+    # run_merge()
     # generate_graphs()
+    # run_graphs_init()
+    run_graphs_parallel()
