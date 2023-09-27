@@ -7,7 +7,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from numpy import ndarray
-from pandas import DataFrame
+from pandas import DataFrame, Series
 
 from src.graph_utils import get_edge_diameter
 
@@ -35,7 +35,7 @@ def extract_numbers(str_arr: list[str]) -> list[int]:
     return [int(name.split('_')[1]) for name in str_arr]
 
 
-def get_column_average(df_path: str, col_regex: str) -> tuple[list, list]:
+def get_column_average(df_path: str, col_regex: str) -> tuple[list, Series]:
     """
     Returns average value of columns whose name matches specified regular expression and column header values.
     :param df_path: Path to dataframe.

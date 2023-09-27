@@ -56,13 +56,13 @@ def plot_avg_ar_vs_p_r1_nodes():
 
 
 def plot_avg_ar_vs_p_r1_edges():
-    eds = [3.5, 4, 4.5, 5]
+    depths = range(3, 7)
     methods = ['qaoa', 'ma']
     lines = []
     for method_ind, method in enumerate(methods):
-        for color_ind, ed in enumerate(eds):
-            ps, p_series = get_column_average(f'graphs/nodes_8/ed_{ed:.2g}/output/{method}/random/out_r1.csv', r'p_\d+$')
-            lines.append(Line(ps, p_series, colors[color_ind], markers[method_ind]))
+        for depth_ind, depth in enumerate(depths):
+            ps, p_series = get_column_average(f'graphs/new/nodes_12/depth_{depth}/output/{method}/random/out_r1.csv', r'p_\d+$')
+            lines.append(Line(ps, p_series, colors[depth_ind], markers[method_ind]))
     plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
     plt.plot([0, 11], [1, 1], 'k--')
     plt.plot([0, 11], [0.99, 0.99], 'r--')
@@ -125,16 +125,15 @@ def plot_avg_ar_vs_p_interp_ma():
 
 
 def plot_avg_ar_vs_p_interp_nodes():
-    nodes = range(7, 11)
-    methods = ['qaoa/interp/out.csv', 'ma/qaoa/out.csv', 'ma/random/out_r1.csv']
+    nodes = range(9, 13)
+    methods = ['qaoa/interp/out.csv', 'ma/qaoa/out.csv']
     lines = []
-    markers = 'oXX'
+    markers = 'oX'
     for method_ind, method in enumerate(methods):
-        for color_ind, n in enumerate(nodes):
-            extra = 'ed_4' if n == 8 else ''
-            ps, p_series = get_column_average(f'graphs/nodes_{n}/{extra}/output/{method}', r'p_\d+$')
+        for n_ind, n in enumerate(nodes):
+            ps, p_series = get_column_average(f'graphs/new/nodes_{n}/depth_3/output/{method}', r'p_\d+$')
             line_style = '-' if method_ind < 2 else '--'
-            lines.append(Line(ps, p_series, colors[color_ind], markers[method_ind], line_style))
+            lines.append(Line(ps, p_series, colors[n_ind], markers[method_ind], line_style))
     plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
     plt.plot([0, 11], [1, 1], 'k--')
     plt.plot([0, 11], [0.99, 0.99], 'r--')
@@ -143,15 +142,15 @@ def plot_avg_ar_vs_p_interp_nodes():
 
 
 def plot_avg_ar_vs_p_interp_edges():
-    eds = [3.5, 4, 4.5, 5]
-    methods = ['qaoa/interp/out.csv', 'ma/qaoa/out.csv', 'ma/random/out_r1.csv']
+    depths = range(3, 7)
+    methods = ['qaoa/interp/out.csv', 'ma/qaoa/out.csv']
     lines = []
-    markers = 'oXX'
+    markers = 'oX'
     for method_ind, method in enumerate(methods):
-        for color_ind, ed in enumerate(eds):
-            ps, p_series = get_column_average(f'graphs/nodes_8/ed_{ed:.2g}/output/{method}', r'p_\d+$')
+        for depth_ind, depth in enumerate(depths):
+            ps, p_series = get_column_average(f'graphs/new/nodes_12/depth_{depth}/output/{method}', r'p_\d+$')
             line_style = '-' if method_ind < 2 else '--'
-            lines.append(Line(ps, p_series, colors[color_ind], markers[method_ind], line_style))
+            lines.append(Line(ps, p_series, colors[depth_ind], markers[method_ind], line_style))
     plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
     plt.plot([0, 11], [1, 1], 'k--')
     plt.plot([0, 11], [0.99, 0.99], 'r--')
@@ -160,12 +159,11 @@ def plot_avg_ar_vs_p_interp_edges():
 
 
 def plot_interp_random_ar_difference_vs_p_nodes():
-    nodes = list(range(7, 11))
+    nodes = range(9, 13)
     lines = []
     for n_ind, n in enumerate(nodes):
-        extra = 'ed_4' if n == 8 else ''
-        ps, ar_qaoa = get_column_average(f'graphs/nodes_{n}/{extra}/output/ma/qaoa/out.csv', r'p_\d+$')
-        ps, ar_rand = get_column_average(f'graphs/nodes_{n}/{extra}/output/ma/random/out_r1.csv', r'p_\d+$')
+        ps, ar_qaoa = get_column_average(f'graphs/new/nodes_{n}/depth_3/output/ma/qaoa/out.csv', r'p_\d+$')
+        ps, ar_rand = get_column_average(f'graphs/new/nodes_{n}/depth_3/output/ma/random/out_r1.csv', r'p_\d+$')
         diff = ar_qaoa - ar_rand
         lines.append(Line(ps, diff, colors[n_ind]))
 
@@ -345,14 +343,14 @@ def plot_converged_fraction_vs_rel_p_r10_edges():
 
 
 if __name__ == "__main__":
-    plot_avg_ar_vs_p_r1_nodes()
+    # plot_avg_ar_vs_p_r1_nodes()
     # plot_avg_ar_vs_p_r1_edges()
     # plot_avg_ar_vs_p_r1_interp_nodes()
     # plot_avg_ar_vs_p_r1_interp_edges()
     # plot_avg_ar_vs_p_interp_ma()
     # plot_avg_ar_vs_p_interp_nodes()
     # plot_avg_ar_vs_p_interp_edges()
-    # plot_interp_random_ar_difference_vs_p_nodes()
+    plot_interp_random_ar_difference_vs_p_nodes()
     # plot_interp_random_ar_difference_vs_p_edges()
     # plot_converged_fraction_vs_min_p_nodes()
     # plot_converged_fraction_vs_min_p_edges()

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
-from src.data_processing import collect_results_from, calculate_edge_diameter, calculate_min_p, merge_dfs
+from src.data_processing import collect_results_from, calculate_edge_diameter, calculate_min_p, merge_dfs, numpy_str_to_array
 from src.graph_utils import get_edge_diameter, get_max_edge_depth, find_non_isomorphic, is_isomorphic
 from src.parallel import optimize_expectation_parallel, worker_standard_qaoa, calculate_maxcut_parallel
 
@@ -141,13 +141,13 @@ def run_graphs_parallel():
 
 
 def run_graph_sequential():
-    data = ('graphs/nodes_8/ed_4/333.gml', np.array([2.812676, -0.41387697, 0.10024993, -2.36888893]))
+    data = ('graphs/new/nodes_9/depth_3/0.gml', numpy_str_to_array('[-1.33029499 -2.06502225]'))
     reader = partial(nx.read_gml, destringizer=int)
-    p = 4
-    search_space = 'qaoa'
+    p = 1
+    search_space = 'ma'
     guess_format = 'qaoa'
     num_restarts = 1
-    _, exp, angles = worker_standard_qaoa(data, reader, p, search_space, guess_format, num_restarts)
+    path, ar, angles, nfev = worker_standard_qaoa(data, reader, p, search_space, guess_format, num_restarts)
     print('Done')
 
 
@@ -164,7 +164,7 @@ def run_merge():
             node_depths = [3] if node < 12 else depths
             for depth in node_depths:
                 base_path = f'graphs/new/nodes_{node}/depth_{depth}/output/{method}/random'
-                merge_dfs(base_path, ps[method_ind], restarts, convergence_threshold,f'{base_path}/out_r{restarts}.csv', copy_better)
+                merge_dfs(base_path, ps[method_ind], restarts, convergence_threshold, f'{base_path}/out_r{restarts}.csv', copy_better)
 
 
 if __name__ == '__main__':
@@ -177,7 +177,8 @@ if __name__ == '__main__':
     # df = calculate_edge_diameter(df)
     # df = calculate_min_p(df)
 
-    run_merge()
+    # run_merge()
+    run_graph_sequential()
     # generate_graphs()
     # run_graphs_init()
     # run_graphs_parallel()
