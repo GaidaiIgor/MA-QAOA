@@ -9,8 +9,8 @@ from networkx import Graph
 
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1
 from src.angle_strategies import qaoa_decorator
-from src.data_processing import get_column_average
-from src.plot_general import colors, Line, assign_distinct_colors, plot_general, markers, save_figure
+from src.data_processing import get_column_average, calculate_min_p, calculate_edge_diameter
+from src.plot_general import colors, Line, plot_general, markers, save_figure
 
 import addcopyfighandler
 assert addcopyfighandler, "Adds an option to copy figures by pressing Ctrl+C"
@@ -40,190 +40,332 @@ def plot_qaoa_expectation_p1(graph: Graph, edge_list: list[tuple[int, int]] = No
     return surf
 
 
-def plot_avg_ar_vs_p_r1():
+def plot_avg_ar_vs_p_r1_nodes():
     nodes = range(7, 11)
     methods = ['qaoa', 'ma']
-    p_ranges = [list(range(1, 11)), list(range(1, 6))]
     lines = []
-    for marker_ind, method in enumerate(methods):
+    for method_ind, method in enumerate(methods):
         for color_ind, n in enumerate(nodes):
             extra = 'ed_4' if n == 8 else ''
-            p_series = []
-            for p in p_ranges[marker_ind]:
-                next_ar = get_column_average(f'graphs/nodes_{n}/{extra}/output/{method}/random/p_{p}/out.csv', r'r_1$')[1][0]
-                p_series.append(next_ar)
-            lines.append(Line(p_ranges[marker_ind], p_series, colors[color_ind], markers[marker_ind]))
-    plot_general(lines, ('p', 'Average AR'), (1, 0.01), (0.75, 10.25, None, 1.0025))
+            ps, p_series = get_column_average(f'graphs/nodes_{n}/{extra}/output/{method}/random/out_r1.csv', r'p_\d+$')
+            lines.append(Line(ps, p_series, colors[color_ind], markers[method_ind]))
+    plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
     plt.plot([0, 11], [1, 1], 'k--')
+    plt.plot([0, 11], [0.99, 0.99], 'r--')
     save_figure()
     plt.show()
 
 
-def plot_avg_ar_vs_restarts():
-    nodes = range(7, 11)
-    ps = range(1, 4)
-    max_restarts = 10
+def plot_avg_ar_vs_p_r1_edges():
+    eds = [3.5, 4, 4.5, 5]
+    methods = ['qaoa', 'ma']
     lines = []
-    for marker_ind, p in enumerate(ps):
+    for method_ind, method in enumerate(methods):
+        for color_ind, ed in enumerate(eds):
+            ps, p_series = get_column_average(f'graphs/nodes_8/ed_{ed:.2g}/output/{method}/random/out_r1.csv', r'p_\d+$')
+            lines.append(Line(ps, p_series, colors[color_ind], markers[method_ind]))
+    plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
+    plt.plot([0, 11], [1, 1], 'k--')
+    plt.plot([0, 11], [0.99, 0.99], 'r--')
+    save_figure()
+    plt.show()
+
+
+def plot_avg_ar_vs_p_r1_interp_nodes():
+    nodes = range(7, 11)
+    methods = ['qaoa/interp/out.csv', 'ma/random/out_r1.csv', 'qaoa/random/out_r1.csv']
+    lines = []
+    markers = 'oXo'
+    for method_ind, method in enumerate(methods):
         for color_ind, n in enumerate(nodes):
             extra = 'ed_4' if n == 8 else ''
-            xs, ys = get_column_average(f'graphs/nodes_{n}/{extra}/output/ma/random/p_{p}/out.csv', r'r_\d+$')
-            if len(xs) > max_restarts:
-                xs = xs[:max_restarts]
-                ys = ys[:max_restarts]
-            lines.append(Line(xs, ys, colors[color_ind], markers[marker_ind]))
-    plot_general(lines, 'Restarts', 'Average AR')
-    plt.gca().xaxis.set_major_locator(MultipleLocator(1))
-    plt.gca().yaxis.set_major_locator(MultipleLocator(0.01))
-    plt.xlim(left=0.75, right=10.25)
-    plt.ylim(top=1.0025)
+            ps, p_series = get_column_average(f'graphs/nodes_{n}/{extra}/output/{method}', r'p_\d+$')
+            line_style = '-' if method_ind < 2 else '--'
+            lines.append(Line(ps, p_series, colors[color_ind], markers[method_ind], line_style))
+    plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
     plt.plot([0, 11], [1, 1], 'k--')
-    plt.savefig('temp/figures/avg_ar_vs_restarts.jpg', dpi=300, bbox_inches='tight')
+    plt.plot([0, 11], [0.99, 0.99], 'r--')
+    save_figure()
     plt.show()
 
 
-def plot_avg_ar_vs_p_nodes():
-    methods = ['qaoa/interp', 'ma/qaoa']
-    nodes = range(7, 11)
+def plot_avg_ar_vs_p_r1_interp_edges():
+    eds = [3.5, 4, 4.5, 5]
+    methods = ['qaoa/interp/out.csv', 'ma/random/out_r1.csv', 'qaoa/random/out_r1.csv']
     lines = []
-    for marker_ind, method in enumerate(methods):
+    markers = 'oXo'
+    for method_ind, method in enumerate(methods):
+        for color_ind, ed in enumerate(eds):
+            ps, p_series = get_column_average(f'graphs/nodes_8/ed_{ed:.2g}/output/{method}', r'p_\d+$')
+            line_style = '-' if method_ind < 2 else '--'
+            lines.append(Line(ps, p_series, colors[color_ind], markers[method_ind], line_style))
+    plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
+    plt.plot([0, 11], [1, 1], 'k--')
+    plt.plot([0, 11], [0.99, 0.99], 'r--')
+    save_figure()
+    plt.show()
+
+
+def plot_avg_ar_vs_p_interp_ma():
+    nodes = [8]
+    methods = ['ma/random/out_r1.csv', 'ma/interp/out.csv']
+    lines = []
+    for method_ind, method in enumerate(methods):
         for color_ind, n in enumerate(nodes):
             extra = 'ed_4' if n == 8 else ''
-            xs, ys = get_column_average(f'graphs/nodes_{n}/{extra}/output/{method}/out.csv', r'p_\d+$')
-            lines.append(Line(xs, ys, colors[color_ind], markers[marker_ind]))
-    plot_general(lines, 'p', 'Average AR')
-    plt.gca().xaxis.set_major_locator(MultipleLocator(1))
-    plt.gca().yaxis.set_major_locator(MultipleLocator(0.01))
-    plt.xlim(left=0.75, right=10.25)
-    plt.ylim(top=1.0025)
+            ps, p_series = get_column_average(f'graphs/nodes_{n}/{extra}/output/{method}', r'p_\d+$')
+            if method_ind == 1:
+                p_series[0] = lines[0].ys[0]
+            line_style = '-' if method_ind < 1 else '--'
+            lines.append(Line(ps, p_series, colors[color_ind], markers[method_ind], line_style))
+    plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
     plt.plot([0, 11], [1, 1], 'k--')
-    plt.savefig('temp/figures/avg_ar_vs_p_nodes.jpg', dpi=300, bbox_inches='tight')
+    plt.plot([0, 11], [0.99, 0.99], 'r--')
+    save_figure()
     plt.show()
 
 
-def plot_avg_ar_vs_p_edges():
-    methods = ['qaoa/interp', 'ma/qaoa']
-    edge_diameters = np.linspace(3.5, 5, 4)
-    lines = []
-    for marker_ind, method in enumerate(methods):
-        for color_ind, ed in enumerate(edge_diameters):
-            xs, ys = get_column_average(f'graphs/nodes_8/ed_{ed:.2g}/output/{method}/out.csv', r'p_\d+$')
-            lines.append(Line(xs, ys, colors[color_ind], markers[marker_ind]))
-    plot_general(lines, 'p', 'Average AR')
-    plt.gca().xaxis.set_major_locator(MultipleLocator(1))
-    plt.gca().yaxis.set_major_locator(MultipleLocator(0.01))
-    plt.xlim(left=0.75, right=10.25)
-    plt.ylim(top=1.0025)
-    plt.plot([0, 11], [1, 1], 'k--')
-    plt.savefig('temp/figures/avg_ar_vs_p_edges.jpg', dpi=300, bbox_inches='tight')
-    plt.show()
-
-
-def plot_num_converged_vs_rel_p():
+def plot_avg_ar_vs_p_interp_nodes():
     nodes = range(7, 11)
+    methods = ['qaoa/interp/out.csv', 'ma/qaoa/out.csv', 'ma/random/out_r1.csv']
     lines = []
-    for color_ind, n in enumerate(nodes):
+    markers = 'oXX'
+    for method_ind, method in enumerate(methods):
+        for color_ind, n in enumerate(nodes):
+            extra = 'ed_4' if n == 8 else ''
+            ps, p_series = get_column_average(f'graphs/nodes_{n}/{extra}/output/{method}', r'p_\d+$')
+            line_style = '-' if method_ind < 2 else '--'
+            lines.append(Line(ps, p_series, colors[color_ind], markers[method_ind], line_style))
+    plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
+    plt.plot([0, 11], [1, 1], 'k--')
+    plt.plot([0, 11], [0.99, 0.99], 'r--')
+    save_figure()
+    plt.show()
+
+
+def plot_avg_ar_vs_p_interp_edges():
+    eds = [3.5, 4, 4.5, 5]
+    methods = ['qaoa/interp/out.csv', 'ma/qaoa/out.csv', 'ma/random/out_r1.csv']
+    lines = []
+    markers = 'oXX'
+    for method_ind, method in enumerate(methods):
+        for color_ind, ed in enumerate(eds):
+            ps, p_series = get_column_average(f'graphs/nodes_8/ed_{ed:.2g}/output/{method}', r'p_\d+$')
+            line_style = '-' if method_ind < 2 else '--'
+            lines.append(Line(ps, p_series, colors[color_ind], markers[method_ind], line_style))
+    plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
+    plt.plot([0, 11], [1, 1], 'k--')
+    plt.plot([0, 11], [0.99, 0.99], 'r--')
+    save_figure()
+    plt.show()
+
+
+def plot_interp_random_ar_difference_vs_p_nodes():
+    nodes = list(range(7, 11))
+    lines = []
+    for n_ind, n in enumerate(nodes):
         extra = 'ed_4' if n == 8 else ''
-        df = pd.read_csv(f'graphs/nodes_{n}/{extra}/output/ma/qaoa/out.csv', index_col=0)
-        ys, xs = np.histogram(df['p_rel_ed'], 8, (-5, 3))
-        lines.append(Line(xs[:-1], ys / 10000, colors[color_ind]))
-    plot_general(lines, 'min p – ED', 'Fraction of converged graphs')
-    plt.gca().set_box_aspect(0.5)
-    # plt.ylim(bottom=-100)
-    plt.savefig(f'temp/figures/num_converged_vs_rel_p.jpg', dpi=300, bbox_inches='tight')
+        ps, ar_qaoa = get_column_average(f'graphs/nodes_{n}/{extra}/output/ma/qaoa/out.csv', r'p_\d+$')
+        ps, ar_rand = get_column_average(f'graphs/nodes_{n}/{extra}/output/ma/random/out_r1.csv', r'p_\d+$')
+        diff = ar_qaoa - ar_rand
+        lines.append(Line(ps, diff, colors[n_ind]))
+
+    plot_general(lines, ('p', 'Average AR difference'), (1, 0.002), (0.75, 5.25, None, None))
+    save_figure()
     plt.show()
+
+
+def plot_interp_random_ar_difference_vs_p_edges():
+    eds = [3.5, 4, 4.5, 5]
+    lines = []
+    for ed_ind, ed in enumerate(eds):
+        ps, ar_qaoa = get_column_average(f'graphs/nodes_8/ed_{ed:.2g}/output/ma/qaoa/out.csv', r'p_\d+$')
+        ps, ar_rand = get_column_average(f'graphs/nodes_8/ed_{ed:.2g}/output/ma/random/out_r1.csv', r'p_\d+$')
+        diff = ar_qaoa - ar_rand
+        lines.append(Line(ps, diff, colors[ed_ind]))
+
+    plot_general(lines, ('p', 'Average AR difference'), (1, 0.002), (0.75, 5.25, None, None))
+    save_figure()
+    plt.show()
+
+
+# def plot_min_restarts_vs_p_nodes():
+#     nodes = list(range(7, 11))
+#     lines = []
+#     for n_ind, n in enumerate(nodes):
+#         extra = 'ed_4' if n == 8 else ''
+#         ps, ar_qaoa = get_column_average(f'graphs/nodes_{n}/{extra}/output/ma/qaoa/out.csv', r'p_\d+$')
+#         ps, ar_rand = get_column_average(f'graphs/nodes_{n}/{extra}/output/ma/random/out_r1.csv', r'p_\d+$')
+#         diff = ar_qaoa - ar_rand
+#         lines.append(Line(ps, diff, colors[n_ind]))
+#
+#     plot_general(lines, ('p', 'Average AR difference'), (1, 0.002), (0.75, 5.25, None, None))
+#     save_figure()
+#     plt.show()
 
 
 def plot_converged_fraction_vs_min_p_nodes():
+    convergence_level = 0.99
     nodes = range(7, 11)
     lines = []
-    for color_ind, n in enumerate(nodes):
+    for n_ind, n in enumerate(nodes):
         extra = 'ed_4' if n == 8 else ''
-        df = pd.read_csv(f'graphs/nodes_{n}/{extra}/output/ma/random/merged_r10.csv', index_col=0)
-        ys, xs = np.histogram(df['min_p'], 5, (1, 6))
-        lines.append(Line(xs[:-1], ys / 10000, colors[color_ind]))
-    plot_general(lines, 'min p', 'Fraction of converged graphs')
-    plt.gca().xaxis.set_major_locator(MultipleLocator(1))
-    plt.gca().set_box_aspect(0.5)
-    plt.savefig(f'temp/figures/converged_fraction_vs_min_p_nodes_r10.jpg', dpi=300, bbox_inches='tight')
+        df = pd.read_csv(f'graphs/nodes_{n}/{extra}/output/ma/qaoa/out.csv', index_col=0)
+        df = calculate_min_p(df, convergence_level)
+        ys, xs = np.histogram(df['min_p'], range(1, 6))
+        lines.append(Line(xs[:-1], ys / df.shape[0], colors[n_ind]))
+    plot_general(lines, ('min p', 'Fraction of converged graphs'), (1, 0.1), (0.75, 5.25, None, None))
+    save_figure()
     plt.show()
 
 
 def plot_converged_fraction_vs_min_p_edges():
-    edge_diameters = np.linspace(3.5, 5, 4)
+    convergence_level = 0.99
+    eds = [3.5, 4, 4.5, 5]
     lines = []
-    for color_ind, ed in enumerate(edge_diameters):
-        df = pd.read_csv(f'graphs/nodes_8/ed_{ed:.2g}/output/ma/random/merged_r10.csv', index_col=0)
-        ys, xs = np.histogram(df['min_p'], 5, (1, 6))
-        lines.append(Line(xs[:-1], ys / 10000, colors[color_ind]))
-    plot_general(lines, 'min p', 'Fraction of converged graphs')
-    plt.gca().xaxis.set_major_locator(MultipleLocator(1))
-    plt.gca().set_box_aspect(0.5)
-    plt.savefig(f'temp/figures/converged_fraction_vs_min_p_edges.jpg', dpi=300, bbox_inches='tight')
+    for ed_ind, ed in enumerate(eds):
+        df = pd.read_csv(f'graphs/nodes_8/ed_{ed:.2g}/output/ma/qaoa/out.csv', index_col=0)
+        df = calculate_min_p(df, convergence_level)
+        ys, xs = np.histogram(df['min_p'], range(1, 6))
+        lines.append(Line(xs[:-1], ys / df.shape[0], colors[ed_ind]))
+    plot_general(lines, ('min p', 'Fraction of converged graphs'), (1, 0.1), (0.75, 5.25, None, None))
+    save_figure()
     plt.show()
 
 
-def plot_interp_random_ar_difference_vs_p():
+def plot_converged_fraction_vs_min_p_r10_nodes():
+    convergence_level = 0.99
     nodes = range(7, 11)
     lines = []
-    for color_ind, n in enumerate(nodes):
+    for n_ind, n in enumerate(nodes):
         extra = 'ed_4' if n == 8 else ''
-        ps, qaoa_ar = get_column_average(f'graphs/nodes_{n}/{extra}/output/ma/qaoa/out.csv', r'p_\d+$')
-        random_ar = []
-        for p in ps:
-            next_ar = get_column_average(f'graphs/nodes_{n}/{extra}/output/ma/random/p_{p}/out.csv', r'r_1$')[1][0]
-            random_ar.append(next_ar)
-        lines.append(Line(ps, qaoa_ar - np.array(random_ar), colors[color_ind]))
-    plot_general(lines, 'p', 'Average AR difference')
-    plt.gca().xaxis.set_major_locator(MultipleLocator(1))
-    plt.gca().yaxis.set_major_locator(MultipleLocator(0.001))
-    plt.xlim(left=0.75, right=5.25)
-    plt.savefig('temp/figures/interp_random_ar_difference_vs_p.jpg', dpi=300, bbox_inches='tight')
+        df = pd.read_csv(f'graphs/nodes_{n}/{extra}/output/ma/random/out_r10.csv', index_col=0)
+        df = calculate_min_p(df, convergence_level)
+        ys, xs = np.histogram(df['min_p'], range(1, 6))
+        lines.append(Line(xs[:-1], ys / df.shape[0], colors[n_ind]))
+    plot_general(lines, ('min p', 'Fraction of converged graphs'), (1, 0.1), (0.75, 5.25, None, None))
+    save_figure()
     plt.show()
 
 
-def plot_interp_random_ar_difference_vs_nodes():
-    nodes = list(range(7, 11))
-    ps = list(range(1, 6))
-    ar_qaoa = []
-    ar_random = []
-    for n in nodes:
-        extra = 'ed_4' if n == 8 else ''
-        calc_ps, next_ar_qaoa = get_column_average(f'graphs/nodes_{n}/{extra}/output/ma/qaoa/out.csv', r'p_\d+$')
-        next_ar_qaoa = next_ar_qaoa.to_list()
-        if ps[-1] > calc_ps[-1]:
-            next_ar_qaoa += [1] * (ps[-1] - calc_ps[-1])
-        ar_qaoa.append(next_ar_qaoa)
-        ar_random_p_series = []
-        for p in ps:
-            next_ar_random = get_column_average(f'graphs/nodes_{n}/{extra}/output/ma/random/p_{p}/out.csv', r'r_1$')[1][0]
-            ar_random_p_series.append(next_ar_random)
-        ar_random.append(ar_random_p_series)
-    ar_qaoa = np.array(ar_qaoa)
-    ar_random = np.array(ar_random)
-
-    ar_qaoa = ar_qaoa.transpose()
-    ar_random = ar_random.transpose()
-
+def plot_converged_fraction_vs_min_p_r10_edges():
+    convergence_level = 0.99
+    eds = [3.5, 4, 4.5, 5]
     lines = []
-    for row_ind in range(ar_qaoa.shape[0]):
-        lines.append(Line(nodes, ar_qaoa[row_ind, :] - ar_random[row_ind, :], colors[row_ind]))
-
-    plot_general(lines, 'Nodes', 'Average AR difference')
-    plt.gca().xaxis.set_major_locator(MultipleLocator(1))
-    plt.gca().yaxis.set_major_locator(MultipleLocator(0.001))
-    # plt.xlim(left=0.75, right=5.25)
-    plt.savefig('temp/figures/interp_random_ar_difference_vs_nodes.jpg', dpi=300, bbox_inches='tight')
+    for ed_ind, ed in enumerate(eds):
+        df = pd.read_csv(f'graphs/nodes_8/ed_{ed:.2g}/output/ma/random/out_r10.csv', index_col=0)
+        df = calculate_min_p(df, convergence_level)
+        ys, xs = np.histogram(df['min_p'], range(1, 6))
+        lines.append(Line(xs[:-1], ys / df.shape[0], colors[ed_ind]))
+    plot_general(lines, ('min p', 'Fraction of converged graphs'), (1, 0.1), (0.75, 5.25, None, None))
+    save_figure()
     plt.show()
+
+
+def plot_converged_fraction_vs_rel_p_nodes():
+    convergence_level = 0.99
+    nodes = range(7, 11)
+    lines = []
+    for n_ind, n in enumerate(nodes):
+        extra = 'ed_4' if n == 8 else ''
+        df = pd.read_csv(f'graphs/nodes_{n}/{extra}/output/ma/qaoa/out.csv', index_col=0)
+        df = calculate_min_p(df, convergence_level)
+        ys, xs = np.histogram(df['min_p'] - df['edge_diameter'], range(-5, 3))
+        lines.append(Line(xs[:-1], ys / df.shape[0], colors[n_ind]))
+    plot_general(lines, ('min p - diameter', 'Fraction of converged graphs'), (1, 0.1), (-5.25, 1.25, None, None))
+    save_figure()
+    plt.show()
+
+
+def plot_converged_fraction_vs_rel_p_edges():
+    convergence_level = 0.99
+    eds = [3.5, 4, 4.5, 5]
+    lines = []
+    for ed_ind, ed in enumerate(eds):
+        df = pd.read_csv(f'graphs/nodes_8/ed_{ed:.2g}/output/ma/qaoa/out.csv', index_col=0)
+        df = calculate_min_p(df, convergence_level)
+        ys, xs = np.histogram(df['min_p'] - df['edge_diameter'], range(-5, 3))
+        lines.append(Line(xs[:-1], ys / df.shape[0], colors[ed_ind]))
+    plot_general(lines, ('min p - diameter', 'Fraction of converged graphs'), (1, 0.1), (-5.25, 1.25, None, None))
+    save_figure()
+    plt.show()
+
+
+def plot_converged_fraction_vs_rel_p_r10_nodes():
+    convergence_level = 0.99
+    nodes = range(7, 11)
+    lines = []
+    for n_ind, n in enumerate(nodes):
+        extra = 'ed_4' if n == 8 else ''
+        df = pd.read_csv(f'graphs/nodes_{n}/{extra}/output/ma/random/out_r10.csv', index_col=0)
+        df = calculate_min_p(df, convergence_level)
+        df = calculate_edge_diameter(df)
+        ys, xs = np.histogram(df['min_p'] - df['edge_diameter'], range(-5, 3))
+        lines.append(Line(xs[:-1], ys / df.shape[0], colors[n_ind]))
+    plot_general(lines, ('min p - diameter', 'Fraction of converged graphs'), (1, 0.1), (-5.25, 1.25, None, None))
+    save_figure()
+    plt.show()
+
+
+def plot_converged_fraction_vs_rel_p_r10_edges():
+    convergence_level = 0.99
+    eds = [3.5, 4, 4.5, 5]
+    lines = []
+    for ed_ind, ed in enumerate(eds):
+        df = pd.read_csv(f'graphs/nodes_8/ed_{ed:.2g}/output/ma/random/out_r10.csv', index_col=0)
+        df = calculate_min_p(df, convergence_level)
+        df = calculate_edge_diameter(df)
+        ys, xs = np.histogram(df['min_p'] - df['edge_diameter'], range(-5, 3))
+        lines.append(Line(xs[:-1], ys / df.shape[0], colors[ed_ind]))
+    plot_general(lines, ('min p - diameter', 'Fraction of converged graphs'), (1, 0.1), (-5.25, 1.25, None, None))
+    save_figure()
+    plt.show()
+
+
+# def plot_avg_ar_vs_restarts():
+#     nodes = range(7, 11)
+#     ps = range(1, 4)
+#     max_restarts = 10
+#     lines = []
+#     for marker_ind, p in enumerate(ps):
+#         for color_ind, n in enumerate(nodes):
+#             extra = 'ed_4' if n == 8 else ''
+#             xs, ys = get_column_average(f'graphs/nodes_{n}/{extra}/output/ma/random/p_{p}/out.csv', r'r_\d+$')
+#             if len(xs) > max_restarts:
+#                 xs = xs[:max_restarts]
+#                 ys = ys[:max_restarts]
+#             lines.append(Line(xs, ys, colors[color_ind], markers[marker_ind]))
+#     plot_general(lines, 'Restarts', 'Average AR')
+#     plt.gca().xaxis.set_major_locator(MultipleLocator(1))
+#     plt.gca().yaxis.set_major_locator(MultipleLocator(0.01))
+#     plt.xlim(left=0.75, right=10.25)
+#     plt.ylim(top=1.0025)
+#     plt.plot([0, 11], [1, 1], 'k--')
+#     plt.savefig('temp/figures/avg_ar_vs_restarts.jpg', dpi=300, bbox_inches='tight')
+#     plt.show()
 
 
 if __name__ == "__main__":
-    plot_avg_ar_vs_p_r1()
+    # plot_avg_ar_vs_p_r1_nodes()
+    # plot_avg_ar_vs_p_r1_edges()
+    # plot_avg_ar_vs_p_r1_interp_nodes()
+    # plot_avg_ar_vs_p_r1_interp_edges()
+    # plot_avg_ar_vs_p_interp_ma()
+    # plot_avg_ar_vs_p_interp_nodes()
+    # plot_avg_ar_vs_p_interp_edges()
+    # plot_interp_random_ar_difference_vs_p_nodes()
+    # plot_interp_random_ar_difference_vs_p_edges()
+    # plot_converged_fraction_vs_min_p_nodes()
+    # plot_converged_fraction_vs_min_p_edges()
+    # plot_converged_fraction_vs_min_p_r10_nodes()
+    plot_converged_fraction_vs_min_p_r10_edges()
+    # plot_converged_fraction_vs_rel_p_nodes()
+    # plot_converged_fraction_vs_rel_p_edges()
+    # plot_converged_fraction_vs_rel_p_r10_nodes()
+    # plot_converged_fraction_vs_rel_p_r10_edges()
+
     # plot_conv_avg_ar_vs_restarts_ma()
-    # plot_avg_ar_vs_p_nodes()
-    # plot_avg_ar_vs_p_edges()
     # plot_num_converged_vs_rel_p()
     # plot_converged_fraction_vs_min_p_nodes()
     # plot_converged_fraction_vs_min_p_edges()
-    # plot_interp_random_ar_difference_vs_p()
     # plot_interp_random_ar_difference_vs_nodes()
