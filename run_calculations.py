@@ -75,7 +75,8 @@ def run_graphs_init():
 
 def get_out_path(data_path: str, method: str, initial_guess: str, p: int) -> str:
     extra = f'p_{p}' if initial_guess == 'random' else ''
-    return f'{data_path}/output/{method}/{initial_guess}/{extra}/out.csv'
+    strategy_name = 'qaoa' if initial_guess == 'explicit' else initial_guess
+    return f'{data_path}/output/{method}/{strategy_name}/{extra}/out.csv'
 
 
 def get_starting_angles_col_name(initial_guess: str, p: int) -> str | None:
@@ -83,20 +84,24 @@ def get_starting_angles_col_name(initial_guess: str, p: int) -> str | None:
         return None
     elif initial_guess == 'interp':
         return f'p_{p - 1}_angles'
-    elif initial_guess == 'qaoa':
+    elif initial_guess == 'explicit':
         return f'p_{p}_starting_angles'
+    else:
+        raise 'Unknown initial_guess'
 
 
 def init_dataframe(initial_guess: str, data_path: str, num_graphs: int, out_path: str):
-    if initial_guess == 'interp':
+    if initial_guess == 'random':
+        paths = [f'{data_path}/{i}.gml' for i in range(num_graphs)]
+        df = DataFrame(paths).set_axis(['path'], axis=1).set_index('path')
+    elif initial_guess == 'interp':
         df = pd.read_csv(f'{data_path}/output/qaoa/random/p_1/out.csv', index_col=0)
         df = df.filter(regex='r_10').rename(columns=lambda name: f'p_1{name[4:]}')
-    elif initial_guess == 'qaoa':
+    elif initial_guess == 'explicit':
         df = pd.read_csv(f'{data_path}/output/qaoa/interp/out.csv', index_col=0)
         df = df.filter(regex=r'p_\d+_angles').rename(columns=lambda name: f'{name[:-7]}_starting_angles')
     else:
-        paths = [f'{data_path}/{i}.gml' for i in range(num_graphs)]
-        df = DataFrame(paths).set_axis(['path'], axis=1).set_index('path')
+        raise 'Unknown initial_guess'
     df.to_csv(out_path)
 
 
@@ -105,7 +110,7 @@ def run_graphs_parallel():
     num_workers = 20
     num_restarts = 1
     worker = 'standard'
-    initial_guess = 'qaoa'
+    initial_guess = 'explicit'
     methods = ['ma']
     ps = {'qaoa': list(range(2, 11)), 'ma': list(range(1, 6))}
     nodes = list(range(9, 13))
@@ -122,7 +127,7 @@ def run_graphs_parallel():
                 for p in ps[method]:
                     for r in restarts:
                         search_space = method
-                        guess_format = 'qaoa' if initial_guess == 'qaoa' else method
+                        guess_format = 'qaoa' if initial_guess == 'explicit' else method
                         data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
                         out_path = get_out_path(data_path, method, initial_guess, p)
                         out_col_prefix = 'r' if initial_guess == 'random' else 'p'
@@ -155,16 +160,16 @@ def run_merge():
     copy_better = True
     nodes = [9, 10, 11, 12]
     depths = [3, 4, 5, 6]
-    methods = ['qaoa', 'ma']
-    ps = [list(range(1, 11)), list(range(1, 6))]
-    restarts = 1
+    methods = ['ma']
+    ps = {'qaoa': list(range(1, 11)), 'ma': list(range(1, 6))}
+    restarts = 10
     convergence_threshold = 0.9995
-    for method_ind, method in enumerate(methods):
+    for method in methods:
         for node in nodes:
             node_depths = [3] if node < 12 else depths
             for depth in node_depths:
                 base_path = f'graphs/new/nodes_{node}/depth_{depth}/output/{method}/random'
-                merge_dfs(base_path, ps[method_ind], restarts, convergence_threshold, f'{base_path}/out_r{restarts}.csv', copy_better)
+                merge_dfs(base_path, ps[method], restarts, convergence_threshold, f'{base_path}/out_r{restarts}.csv', copy_better)
 
 
 if __name__ == '__main__':
@@ -178,7 +183,7 @@ if __name__ == '__main__':
     # df = calculate_min_p(df)
 
     # run_merge()
-    run_graph_sequential()
+    # run_graph_sequential()
     # generate_graphs()
     # run_graphs_init()
-    # run_graphs_parallel()
+    run_graphs_parallel()
