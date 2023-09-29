@@ -3,6 +3,7 @@ General plotting functions.
 """
 import inspect
 from dataclasses import dataclass
+from typing import Sequence
 
 import distinctipy
 from matplotlib import pyplot as plt
@@ -18,8 +19,8 @@ class Line:
     """
     Class that represents a line in a 2D plot.
     """
-    xs: list[float]
-    ys: list[float]
+    xs: Sequence
+    ys: Sequence
     color: tuple = colors[0]
     marker: str = 'o'
     style: str = 'solid'

@@ -165,7 +165,7 @@ def calculate_maxcut_parallel(paths: list[str], num_workers: int, reader: callab
 
 
 def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_workers: int, worker: str, reader: callable, search_space: str, p: int, initial_guess: str,
-                                  guess_format: str, angles_col: str | None, num_restarts: int, copy_col: str | None, copy_p: int, copy_better: bool, out_col: str) -> int:
+                                  guess_format: str, angles_col: str | None, num_restarts: int, copy_col: str | None, copy_p: int, copy_better: bool, out_col: str):
     """
     Optimizes cut expectation for a given set of graphs in parallel and writes the output dataframe.
     :param dataframe_path: Path to input dataframe with information about jobs.
@@ -187,22 +187,23 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     """
     df = pd.read_csv(dataframe_path, index_col=0)
     rows = rows_func(df)
+    cols = ['path', out_col, f'{out_col}_angles', f'{out_col}_nfev']
     worker_data = prepare_worker_data(df, rows, initial_guess, angles_col, p - 1)
-    worker_func = select_worker_func(worker, reader, p, search_space, guess_format, num_restarts)
-    results = []
-    with Pool(num_workers) as pool:
-        for result in tqdm(pool.imap(worker_func, worker_data), total=len(worker_data), smoothing=0, ascii=' █'):
-            if result is not None:
-                results.append(result)
 
-    if len(results) > 0:
-        out_angle_col = get_angle_col_name(out_col)
-        new_df = DataFrame(results).set_axis(['path', out_col, out_angle_col, f'{out_col}_nfev'], axis=1).set_index('path').sort_index()
-        df.update(new_df)
-        df = df.join(new_df[new_df.columns.difference(df.columns)])
-        df = copy_expectation_column(df, copy_better, copy_col, out_col, copy_p, p)
+    if len(worker_data) == 0:
+        results = np.full((df.shape[0], len(cols)), np.nan)
+    else:
+        worker_func = select_worker_func(worker, reader, p, search_space, guess_format, num_restarts)
+        results = []
+        with Pool(num_workers) as pool:
+            for result in tqdm(pool.imap(worker_func, worker_data), total=len(worker_data), smoothing=0, ascii=' █'):
+                if result is not None:
+                    results.append(result)
 
-        print(f'p: {p}; mean: {np.mean(df[out_col])}; converged: {sum(df[out_col] > 0.9995)}; nfev: {np.mean(df[f"{out_col}_nfev"])}\n')
-        df.to_csv(dataframe_path)
+    new_df = DataFrame(results).set_axis(cols, axis=1).set_index('path').sort_index()
+    df.update(new_df)
+    df = df.join(new_df[new_df.columns.difference(df.columns)])
+    df = copy_expectation_column(df, copy_better, copy_col, out_col, copy_p, p)
 
-    return len(results)
+    print(f'p: {p}; mean: {np.mean(df[out_col])}; converged: {sum(df[out_col] > 0.9995)}; nfev: {np.mean(df[f"{out_col}_nfev"])}\n')
+    df.to_csv(dataframe_path)
