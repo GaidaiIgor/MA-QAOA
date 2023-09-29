@@ -35,18 +35,19 @@ def extract_numbers(str_arr: list[str]) -> list[int]:
     return [int(name.split('_')[1]) for name in str_arr]
 
 
-def get_column_average(df_path: str, col_regex: str) -> tuple[list, Series]:
+def get_column_statistic(df_path: str, col_regex: str, aggregator: callable = np.mean) -> tuple[list, list]:
     """
     Returns average value of columns whose name matches specified regular expression and column header values.
     :param df_path: Path to dataframe.
     :param col_regex: Regular expression for column names.
-    :return: 1) List of column header values. 2) List of corresponding column averages.
+    :param aggregator: Function that accepts a column from dataframe and returns aggregated object, e.g. a number.
+    :return: 1) List of column header values. 2) List of corresponding column statistic.
     """
     df = pd.read_csv(df_path, index_col=0)
     df = df.filter(regex=col_regex)
     header_values = extract_numbers(df.columns)
-    averages = np.mean(df, axis=0)
-    return header_values, averages
+    stats = [aggregator(df[col]) for col in df.columns]
+    return header_values, stats
 
 
 def calculate_edge_diameter(df: DataFrame):
