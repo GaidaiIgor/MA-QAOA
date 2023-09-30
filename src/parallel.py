@@ -191,7 +191,7 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     worker_data = prepare_worker_data(df, rows, initial_guess, angles_col, p - 1)
 
     if len(worker_data) == 0:
-        results = np.full((df.shape[0], len(cols)), np.nan)
+        results = [(path, *[np.nan] * (len(cols) - 1)) for path in df.index]
     else:
         worker_func = select_worker_func(worker, reader, p, search_space, guess_format, num_restarts)
         results = []

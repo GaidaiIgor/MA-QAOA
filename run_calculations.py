@@ -110,12 +110,12 @@ def run_graphs_parallel():
     num_workers = 20
     num_restarts = 1
     worker = 'standard'
-    initial_guess = 'explicit'
+    initial_guess = 'random'
     methods = ['ma']
-    ps = {'qaoa': list(range(2, 11)), 'ma': list(range(1, 6))}
-    nodes = list(range(9, 13))
-    depths = list(range(3, 7))
-    restarts = list(range(1, 2))
+    nodes = list(range(9, 10))
+    depths = list(range(3, 4))
+    ps = {'qaoa': list(range(2, 11)), 'ma': list(range(2, 3))}
+    restarts = list(range(11, 16))
     reader = partial(nx.read_gml, destringizer=int)
     copy_better = True
     convergence_threshold = 0.9995
