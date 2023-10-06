@@ -1,3 +1,4 @@
+import os
 from functools import partial
 from os import path
 
@@ -74,10 +75,14 @@ def run_graphs_init():
         calculate_maxcut_parallel(paths, num_workers, reader)
 
 
-def get_out_path(data_path: str, method: str, initial_guess: str, p: int) -> str:
-    extra = f'p_{p}' if initial_guess == 'random' else ''
-    strategy_name = 'qaoa' if initial_guess == 'explicit' else initial_guess
-    return f'{data_path}/output/{method}/{strategy_name}/{extra}/out.csv'
+def get_out_path(data_path: str, search_space: str, initial_guess: str, guess_format: str, p: int = None) -> str:
+    out_path = f'{data_path}/output/{search_space}/{initial_guess}'
+    if search_space == 'ma' and initial_guess == 'random':
+        out_path = f'{out_path}/{guess_format}'
+    if p is not None:
+        out_path = f'{out_path}/p_{p}'
+    out_path = f'{out_path}/out.csv'
+    return out_path
 
 
 def get_starting_angles_col_name(initial_guess: str, p: int) -> str | None:
@@ -110,13 +115,12 @@ def run_graphs_parallel():
     num_graphs = 1000
     num_workers = 20
     worker = 'standard'
-    method = 'ma'
     search_space = 'ma'
     initial_guess = 'random'
     guess_format = 'qaoa'
     nodes = list(range(9, 10))
     depths = list(range(3, 7))
-    ps = {'qaoa': list(range(17, 19)), 'ma': list(range(1, 6))}
+    ps = list(range(1, 6))
     reader = partial(nx.read_gml, destringizer=int)
     copy_better = True
     convergence_threshold = 0.9995
@@ -124,9 +128,9 @@ def run_graphs_parallel():
     for node in nodes:
         node_depths = [3] if node < 12 else depths
         for depth in node_depths:
-            for p in ps[method]:
-                data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
-                out_path = get_out_path(data_path, method, initial_guess, p)
+            data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
+            out_path = get_out_path(data_path, search_space, initial_guess, guess_format)
+            for p in ps:
                 starting_angles_col = get_starting_angles_col_name(initial_guess, p)
                 out_col_name = f'p_{p}'
                 rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
@@ -134,6 +138,7 @@ def run_graphs_parallel():
                 copy_p = p - 1
 
                 if not path.exists(out_path):
+                    os.makedirs(path.split(out_path)[0])
                     init_dataframe(initial_guess, data_path, num_graphs, out_path)
 
                 optimize_expectation_parallel(out_path, rows_func, num_workers, worker, reader, search_space, p, initial_guess, guess_format, starting_angles_col,
@@ -149,8 +154,7 @@ def run_graph_sequential():
 
     search_space = 'qaoa'
     guess_format = 'qaoa'
-    num_restarts = 1
-    path, ar, angles, nfev = worker_standard_qaoa(data, reader, p, search_space, guess_format, num_restarts)
+    path, ar, angles, nfev = worker_standard_qaoa(data, reader, p, search_space, guess_format)
     print('Done')
 
 
