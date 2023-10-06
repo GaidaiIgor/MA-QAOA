@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
+from src.angle_strategies import interp_qaoa_angles
 from src.data_processing import collect_results_from, calculate_edge_diameter, calculate_min_p, merge_dfs, numpy_str_to_array
 from src.graph_utils import get_edge_diameter, get_max_edge_depth, find_non_isomorphic, is_isomorphic
 from src.parallel import optimize_expectation_parallel, worker_standard_qaoa, calculate_maxcut_parallel
@@ -108,48 +109,45 @@ def init_dataframe(initial_guess: str, data_path: str, num_graphs: int, out_path
 def run_graphs_parallel():
     num_graphs = 1000
     num_workers = 20
-    num_restarts = 1
     worker = 'standard'
+    method = 'ma'
+    search_space = 'ma'
     initial_guess = 'random'
-    methods = ['ma']
+    guess_format = 'qaoa'
     nodes = list(range(9, 10))
-    depths = list(range(3, 4))
-    ps = {'qaoa': list(range(2, 11)), 'ma': list(range(2, 3))}
-    restarts = list(range(11, 16))
+    depths = list(range(3, 7))
+    ps = {'qaoa': list(range(17, 19)), 'ma': list(range(1, 6))}
     reader = partial(nx.read_gml, destringizer=int)
     copy_better = True
     convergence_threshold = 0.9995
 
-    for method in methods:
-        for node in nodes:
-            node_depths = [3] if node < 12 else depths
-            for depth in node_depths:
-                for p in ps[method]:
-                    for r in restarts:
-                        search_space = method
-                        guess_format = 'qaoa' if initial_guess == 'explicit' else method
-                        data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
-                        out_path = get_out_path(data_path, method, initial_guess, p)
-                        out_col_prefix = 'r' if initial_guess == 'random' else 'p'
-                        counter = r if out_col_prefix == 'r' else p
-                        starting_angles_col = get_starting_angles_col_name(initial_guess, p)
-                        out_col_name = f'{out_col_prefix}_{counter}'
-                        rows_func = lambda df: None if counter == 1 else df[f'{out_col_prefix}_{counter - 1}'] < convergence_threshold
-                        copy_col = None if counter == 1 else f'{out_col_prefix}_{counter - 1}'
-                        copy_p = p if out_col_prefix == 'r' else p - 1
+    for node in nodes:
+        node_depths = [3] if node < 12 else depths
+        for depth in node_depths:
+            for p in ps[method]:
+                data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
+                out_path = get_out_path(data_path, method, initial_guess, p)
+                starting_angles_col = get_starting_angles_col_name(initial_guess, p)
+                out_col_name = f'p_{p}'
+                rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
+                copy_col = None if p == 1 else f'p_{p - 1}'
+                copy_p = p - 1
 
-                        if not path.exists(out_path):
-                            init_dataframe(initial_guess, data_path, num_graphs, out_path)
+                if not path.exists(out_path):
+                    init_dataframe(initial_guess, data_path, num_graphs, out_path)
 
-                        optimize_expectation_parallel(out_path, rows_func, num_workers, worker, reader, search_space, p, initial_guess, guess_format, starting_angles_col,
-                                                      num_restarts, copy_col, copy_p, copy_better, out_col_name)
+                optimize_expectation_parallel(out_path, rows_func, num_workers, worker, reader, search_space, p, initial_guess, guess_format, starting_angles_col,
+                                              copy_col, copy_p, copy_better, out_col_name)
 
 
 def run_graph_sequential():
-    data = ('graphs/new/nodes_9/depth_3/0.gml', numpy_str_to_array('[-1.33029499 -2.06502225]'))
+    starting_angles = numpy_str_to_array('[ 1.3896995   1.81521346  0.32905467  0.80337469  0.22299807  0.35461214  0.06168871 -0.40208917 -0.51137584 -1.82957246]')
+    p = 6
+    starting_angles = interp_qaoa_angles(starting_angles, p - 1)
+    data = ('graphs/new/nodes_12/depth_3/217.gml', None)
     reader = partial(nx.read_gml, destringizer=int)
-    p = 1
-    search_space = 'ma'
+
+    search_space = 'qaoa'
     guess_format = 'qaoa'
     num_restarts = 1
     path, ar, angles, nfev = worker_standard_qaoa(data, reader, p, search_space, guess_format, num_restarts)

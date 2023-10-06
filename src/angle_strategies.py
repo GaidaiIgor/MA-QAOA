@@ -50,7 +50,7 @@ def qaoa_decorator(ma_qaoa_func: callable, num_edges: int, num_nodes: int) -> ca
     return qaoa_wrapped
 
 
-def linear_ramp(params: ndarray, p: int) -> ndarray:
+def convert_angles_linear_qaoa(params: ndarray, p: int) -> ndarray:
     """
     Returns QAOA angles defined by the linear ramp strategy. Linear ramp changes angles linearly from starting to final over p layers.
     :param params: 1D array of 4 numbers: starting and ending gamma, then starting and ending beta.
@@ -71,7 +71,7 @@ def linear_decorator(qaoa_func: callable, p: int) -> callable:
     :return: Adapted function that accepts angles in linear ramp format.
     """
     def linear_wrapped(*args, **kwargs):
-        qaoa_angles = linear_ramp(args[0], p)
+        qaoa_angles = convert_angles_linear_qaoa(args[0], p)
         return qaoa_func(qaoa_angles, *args[1:], **kwargs)
     return linear_wrapped
 

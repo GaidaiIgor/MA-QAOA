@@ -12,17 +12,16 @@ from tqdm import tqdm
 from src.data_processing import numpy_str_to_array, get_angle_col_name, copy_expectation_column
 from src.graph_utils import get_index_edge_list
 from src.optimization import Evaluator, optimize_qaoa_angles
-from src.angle_strategies import convert_angles_qaoa_to_ma, linear_ramp, convert_angles_tqa_qaoa, interp_qaoa_angles
+from src.angle_strategies import convert_angles_qaoa_to_ma, convert_angles_linear_qaoa, convert_angles_tqa_qaoa, interp_qaoa_angles
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
 
 
-def worker_general_qaoa(data: tuple, reader: callable, p: int, num_restarts: int):
+def worker_general_qaoa(data: tuple, reader: callable, p: int):
     """
     Worker function for Generalized QAOA.
     :param data: Tuple of input data for the worker. Includes 1) Path to the input file; 2) Starting point for optimization (or None).
     :param reader: Function that reads graph from the file.
     :param p: Number of QAOA layers.
-    :param num_restarts: Number of optimization restarts.
     :return: 1) Path to processed file; 2) Approximation ratio; 3) Corresponding angles.
     """
     path, starting_point = data
@@ -35,7 +34,7 @@ def worker_general_qaoa(data: tuple, reader: callable, p: int, num_restarts: int
     # driver_term_vals = np.append(driver_term_vals, driver_term_vals_2, axis=0)
 
     evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p)
-    expectation, angles = optimize_qaoa_angles(evaluator, num_restarts=num_restarts)
+    expectation, angles = optimize_qaoa_angles(evaluator)
     return path, expectation / graph.graph['maxcut'], angles
 
 
@@ -55,7 +54,7 @@ def worker_general_qaoa_sub(path: str, reader: callable, p: int):
     return path, *optimize_qaoa_angles(evaluator, num_restarts=1)
 
 
-def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: str, guess_format: str = None, num_restarts: int = 1):
+def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: str, guess_format: str = None):
     """
     Worker function for non-generalized QAOA.
     :param data: Tuple of input data for the worker. Includes 1) Path to the input file; 2) Starting point for optimization (or None).
@@ -63,27 +62,31 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
     :param p: Number of QAOA layers.
     :param search_space: Name of angle search space (ma, qaoa, linear, tqa).
     :param guess_format: Name of format of starting point (same options as for search space).
-    :param num_restarts: Number of restarts for optimization when starting from random angles.
     :return: 1) Path to processed file; 2) Approximation ratio; 3) Corresponding angles.
     """
     path, starting_point = data
     graph = reader(path)
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
+
     if starting_point is None:
-        result = optimize_qaoa_angles(evaluator, num_restarts=num_restarts, objective_max=graph.graph['maxcut'])
+        if guess_format == 'qaoa':
+            starting_point = np.random.uniform(-np.pi, np.pi, 2 * p)
+        elif guess_format == 'ma':
+            starting_point = np.random.uniform(-np.pi, np.pi, (len(graph) + len(graph.edges)) * p)
 
-    else:
-        if search_space == 'ma' and guess_format == 'qaoa':
-            starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
-        method = 'Nelder-Mead' if starting_point[-1] == 0 else 'BFGS'
-        result = optimize_qaoa_angles(evaluator, starting_point=starting_point, method=method)
+    if search_space == 'ma' and guess_format == 'qaoa':
+        starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
 
-    if search_space == 'linear' or search_space == 'tqa':
-        if search_space == 'linear':
-            qaoa_angles = linear_ramp(result.x, p)
-        elif search_space == 'tqa':
+    method = 'Nelder-Mead' if starting_point[-1] == 0 else 'BFGS'
+    result = optimize_qaoa_angles(evaluator, starting_point=starting_point, method=method)
+
+    if search_space == 'tqa' or search_space == 'linear':
+        if search_space == 'tqa':
             qaoa_angles = convert_angles_tqa_qaoa(result.x, p)
-        evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='regular')
+        elif search_space == 'linear':
+            qaoa_angles = convert_angles_linear_qaoa(result.x, p)
+
+        evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='qaoa')
         result = optimize_qaoa_angles(evaluator, starting_point=qaoa_angles)
 
     return path, -result.fun / graph.graph['maxcut'], result.x, result.nfev
@@ -103,7 +106,7 @@ def worker_maxcut(path: str, reader: callable):
     nx.write_gml(graph, path)
 
 
-def select_worker_func(worker: str, reader: callable, p: int, search_space: str, guess_format: str, num_restarts: int = 1):
+def select_worker_func(worker: str, reader: callable, p: int, search_space: str, guess_format: str):
     """
     Selects worker function based on arguments and binds all arguments except the input path.
     :param worker: Name of worker.
@@ -111,15 +114,14 @@ def select_worker_func(worker: str, reader: callable, p: int, search_space: str,
     :param p: Number of QAOA layers.
     :param search_space: Name of angle search space (ma, qaoa, linear, tqa).
     :param guess_format: Name of format of starting point (same options as for search space).
-    :param num_restarts: Number of restarts for optimization when starting from random angles.
     :return: Bound worker function.
     """
     if worker == 'general':
-        worker_func = partial(worker_general_qaoa, reader=reader, p=p, num_restarts=num_restarts)
+        worker_func = partial(worker_general_qaoa, reader=reader, p=p)
     elif worker == 'general_sub':
         worker_func = partial(worker_general_qaoa_sub, reader=reader, p=p)
     elif worker == 'standard':
-        worker_func = partial(worker_standard_qaoa, reader=reader, p=p, search_space=search_space, guess_format=guess_format, num_restarts=num_restarts)
+        worker_func = partial(worker_standard_qaoa, reader=reader, p=p, search_space=search_space, guess_format=guess_format)
     return worker_func
 
 
@@ -165,7 +167,7 @@ def calculate_maxcut_parallel(paths: list[str], num_workers: int, reader: callab
 
 
 def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_workers: int, worker: str, reader: callable, search_space: str, p: int, initial_guess: str,
-                                  guess_format: str, angles_col: str | None, num_restarts: int, copy_col: str | None, copy_p: int, copy_better: bool, out_col: str):
+                                  guess_format: str, angles_col: str | None, copy_col: str | None, copy_p: int, copy_better: bool, out_col: str):
     """
     Optimizes cut expectation for a given set of graphs in parallel and writes the output dataframe.
     :param dataframe_path: Path to input dataframe with information about jobs.
@@ -178,7 +180,6 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     :param initial_guess: Initial guess strategy (random, explicit or interp).
     :param guess_format: Name of format of starting point (same options as for search space).
     :param angles_col: Name of column in df with initial angles for optimization.
-    :param num_restarts: Number of restarts for optimization when starting from random angles.
     :param copy_col: Name of the column from where expectation should be copied if it was not calculated in the current round (=None).
     :param copy_p: Value of p for the copy column. If current p is different, the copied angles will be appended with 0 to keep the angle format consistent.
     :param copy_better: If true, better expectation values will also be copied from copy_col.
@@ -193,7 +194,7 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     if len(worker_data) == 0:
         results = [(path, *[np.nan] * (len(cols) - 1)) for path in df.index]
     else:
-        worker_func = select_worker_func(worker, reader, p, search_space, guess_format, num_restarts)
+        worker_func = select_worker_func(worker, reader, p, search_space, guess_format)
         results = []
         with Pool(num_workers) as pool:
             for result in tqdm(pool.imap(worker_func, worker_data), total=len(worker_data), smoothing=0, ascii=' █'):
