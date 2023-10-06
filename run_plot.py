@@ -134,9 +134,13 @@ def plot_avg_ar_vs_p_interp_nodes():
             ps, p_series = get_column_statistic(f'graphs/new/nodes_{n}/depth_3/output/{method}', r'p_\d+$')
             line_style = '-' if method_ind < 2 else '--'
             lines.append(Line(ps, p_series, colors[n_ind], markers[method_ind], line_style))
-    plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
-    plt.plot([0, 11], [1, 1], 'k--')
-    plt.plot([0, 11], [0.99, 0.99], 'r--')
+    x_lim = [0.75, 14.25]
+    plot_general(lines, ('p', 'Average AR'), (1, 0.01), (*x_lim, None, 1.0025))
+    plt.legend([f'{x} nodes' for x in nodes], loc='lower right', fontsize='small')
+    plt.plot(x_lim, [1, 1], 'k--')
+    plt.plot(x_lim, [0.99, 0.99], 'r--')
+    plt.text(7.3, 0.96, 'QAOA')
+    plt.text(2.2, 0.98, 'MA-QAOA')
     save_figure()
     plt.show()
 
@@ -151,9 +155,13 @@ def plot_avg_ar_vs_p_interp_edges():
             ps, p_series = get_column_statistic(f'graphs/new/nodes_12/depth_{depth}/output/{method}', r'p_\d+$')
             line_style = '-' if method_ind < 2 else '--'
             lines.append(Line(ps, p_series, colors[depth_ind], markers[method_ind], line_style))
-    plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
-    plt.plot([0, 11], [1, 1], 'k--')
-    plt.plot([0, 11], [0.99, 0.99], 'r--')
+    x_lim = [0.75, 14.25]
+    plot_general(lines, ('p', 'Average AR'), (1, 0.01), (*x_lim, None, 1.0025))
+    plt.legend([f'Depth = {x}' for x in depths], loc='lower right', fontsize='small')
+    plt.plot(x_lim, [1, 1], 'k--')
+    plt.plot(x_lim, [0.99, 0.99], 'r--')
+    plt.text(7.3, 0.96, 'QAOA')
+    plt.text(3.7, 0.98, 'MA-QAOA')
     save_figure()
     plt.show()
 
@@ -168,10 +176,11 @@ def plot_min_ar_vs_p_interp_nodes():
             ps, p_series = get_column_statistic(f'graphs/new/nodes_{n}/depth_3/output/{method}', r'p_\d+$', min)
             line_style = '-' if method_ind < 2 else '--'
             lines.append(Line(ps, p_series, colors[n_ind], markers[method_ind], line_style))
-    plot_general(lines, ('p', 'Min AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
+    x_lim = [0.75, 18.25]
+    plot_general(lines, ('p', 'Min AR'), (1, 0.02), (*x_lim, None, 1.0025))
     plt.legend([f'{x} nodes' for x in nodes], loc='lower right', fontsize='small')
-    plt.plot([0, 11], [1, 1], 'k--')
-    plt.plot([0, 11], [0.99, 0.99], 'r--')
+    plt.plot(x_lim, [1, 1], 'k--')
+    plt.plot(x_lim, [0.99, 0.99], 'r--')
     plt.text(5.5, 0.72, 'QAOA')
     plt.text(3.8, 0.96, 'MA-QAOA')
     save_figure()
@@ -185,15 +194,62 @@ def plot_min_ar_vs_p_interp_edges():
     markers = 'oX'
     for method_ind, method in enumerate(methods):
         for depth_ind, depth in enumerate(depths):
-            ps, p_series = get_column_statistic(f'graphs/new/nodes_12/depth_{depth}/output/{method}', r'p_\d+$', min)
+            ps, avg_ar = get_column_statistic(f'graphs/new/nodes_12/depth_{depth}/output/{method}', r'p_\d+$', min)
             line_style = '-' if method_ind < 2 else '--'
-            lines.append(Line(ps, p_series, colors[depth_ind], markers[method_ind], line_style))
-    plot_general(lines, ('p', 'Min AR'), (1, 0.02), (0.75, 10.25, None, 1.0025))
+            lines.append(Line(ps, avg_ar, colors[depth_ind], markers[method_ind], line_style))
+    x_lim = [0.75, 14.25]
+    plot_general(lines, ('p', 'Min AR'), (1, 0.02), (*x_lim, None, 1.0025))
     plt.legend([f'Depth = {x}' for x in depths], loc='lower right', fontsize='small')
-    plt.plot([0, 11], [1, 1], 'k--')
-    plt.plot([0, 11], [0.99, 0.99], 'r--')
+    plt.plot(x_lim, [1, 1], 'k--')
+    plt.plot(x_lim, [0.99, 0.99], 'r--')
     plt.text(5.5, 0.72, 'QAOA')
     plt.text(5.4, 0.96, 'MA-QAOA')
+    save_figure()
+    plt.show()
+
+
+def plot_avg_ar_vs_cost_interp_nodes():
+    nodes = range(9, 13)
+    methods = ['qaoa/interp/out.csv', 'ma/qaoa/out.csv']
+    lines = []
+    markers = 'oX'
+    for method_ind, method in enumerate(methods):
+        for n_ind, n in enumerate(nodes):
+            ps, avg_ar = get_column_statistic(f'graphs/new/nodes_{n}/depth_3/output/{method}', r'p_\d+$')
+            ps, avg_nfev = get_column_statistic(f'graphs/new/nodes_{n}/depth_3/output/{method}', r'p_\d+_nfev')
+            avg_cost = np.array(avg_nfev) * np.array(ps)
+            line_style = '-' if method_ind < 2 else '--'
+            lines.append(Line(avg_cost, avg_ar, colors[n_ind], markers[method_ind], line_style))
+    x_lim = [-1000, 40000]
+    plot_general(lines, ('Cost', 'Avg AR'), (None, 0.01), (*x_lim, None, 1.0025))
+    plt.legend([f'{x} nodes' for x in nodes], loc='lower right', fontsize='small')
+    plt.plot(x_lim, [1, 1], 'k--')
+    plt.plot(x_lim, [0.99, 0.99], 'r--')
+    plt.text(0, 0.9825, 'QAOA')
+    plt.text(13000, 0.955, 'MA-QAOA')
+    save_figure()
+    plt.show()
+
+
+def plot_avg_ar_vs_cost_interp_edges():
+    depths = range(3, 7)
+    methods = ['qaoa/interp/out.csv', 'ma/qaoa/out.csv']
+    lines = []
+    markers = 'oX'
+    for method_ind, method in enumerate(methods):
+        for depth_ind, depth in enumerate(depths):
+            ps, avg_ar = get_column_statistic(f'graphs/new/nodes_12/depth_{depth}/output/{method}', r'p_\d+$')
+            ps, avg_nfev = get_column_statistic(f'graphs/new/nodes_12/depth_{depth}/output/{method}', r'p_\d+_nfev')
+            avg_cost = np.array(avg_nfev) * np.array(ps)
+            line_style = '-' if method_ind < 2 else '--'
+            lines.append(Line(avg_cost, avg_ar, colors[depth_ind], markers[method_ind], line_style))
+    x_lim = [-1000, 40000]
+    plot_general(lines, ('Cost', 'Avg AR'), (None, 0.01), (*x_lim, None, 1.0025))
+    plt.legend([f'Depth = {x}' for x in depths], loc='lower right', fontsize='small')
+    plt.plot(x_lim, [1, 1], 'k--')
+    plt.plot(x_lim, [0.99, 0.99], 'r--')
+    plt.text(0, 0.98, 'QAOA')
+    plt.text(15000, 0.96, 'MA-QAOA')
     save_figure()
     plt.show()
 
@@ -388,10 +444,13 @@ if __name__ == "__main__":
     # plot_avg_ar_vs_p_r1_interp_nodes()
     # plot_avg_ar_vs_p_r1_interp_edges()
     # plot_avg_ar_vs_p_interp_ma()
+
     # plot_avg_ar_vs_p_interp_nodes()
     # plot_avg_ar_vs_p_interp_edges()
-    # plot_min_ar_vs_p_interp_nodes()
-    plot_min_ar_vs_p_interp_edges()
+    plot_min_ar_vs_p_interp_nodes()
+    # plot_min_ar_vs_p_interp_edges()
+    # plot_avg_ar_vs_cost_interp_nodes()
+    # plot_avg_ar_vs_cost_interp_edges()
     # plot_interp_random_ar_difference_vs_p_nodes()
     # plot_interp_random_ar_difference_vs_p_edges()
     # plot_converged_fraction_vs_min_p_nodes()
