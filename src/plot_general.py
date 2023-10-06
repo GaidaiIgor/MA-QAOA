@@ -76,7 +76,7 @@ def plot_general(lines: list[Line], labels: tuple[str | None, str | None] = None
 
     plt.get_current_fig_manager().window.state('zoomed')
     plt.gca().set_box_aspect(1)
-    plt.gcf().set_size_inches(8, 8)
+    plt.gcf().set_size_inches(10, 10)
     plt.tight_layout(pad=0.5)
 
 
