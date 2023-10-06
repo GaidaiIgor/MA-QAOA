@@ -76,7 +76,9 @@ def run_graphs_init():
 
 
 def get_out_path(data_path: str, search_space: str, initial_guess: str, guess_format: str, p: int = None) -> str:
-    out_path = f'{data_path}/output/{search_space}/{initial_guess}'
+    out_path = f'{data_path}/output/{search_space}'
+    if search_space == 'ma' or search_space == 'qaoa':
+        out_path = f'{out_path}/{initial_guess}'
     if search_space == 'ma' and initial_guess == 'random':
         out_path = f'{out_path}/{guess_format}'
     if p is not None:
@@ -114,10 +116,10 @@ def init_dataframe(initial_guess: str, data_path: str, num_graphs: int, out_path
 def run_graphs_parallel():
     num_graphs = 1000
     num_workers = 20
-    worker = 'standard'
-    search_space = 'ma'
+    worker = 'general'
+    search_space = 'gen1'
     initial_guess = 'random'
-    guess_format = 'qaoa'
+    guess_format = 'gen1'
     nodes = list(range(9, 10))
     depths = list(range(3, 7))
     ps = list(range(1, 6))
@@ -137,8 +139,10 @@ def run_graphs_parallel():
                 copy_col = None if p == 1 else f'p_{p - 1}'
                 copy_p = p - 1
 
-                if not path.exists(out_path):
+                out_folder = path.split(out_path)[0]
+                if not path.exists(out_folder):
                     os.makedirs(path.split(out_path)[0])
+                if not path.exists(out_path):
                     init_dataframe(initial_guess, data_path, num_graphs, out_path)
 
                 optimize_expectation_parallel(out_path, rows_func, num_workers, worker, reader, search_space, p, initial_guess, guess_format, starting_angles_col,

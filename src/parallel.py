@@ -34,8 +34,8 @@ def worker_general_qaoa(data: tuple, reader: callable, p: int):
     # driver_term_vals = np.append(driver_term_vals, driver_term_vals_2, axis=0)
 
     evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p)
-    expectation, angles = optimize_qaoa_angles(evaluator)
-    return path, expectation / graph.graph['maxcut'], angles
+    result = optimize_qaoa_angles(evaluator)
+    return path, -result.fun / graph.graph['maxcut'], result.x, result.nfev
 
 
 def worker_general_qaoa_sub(path: str, reader: callable, p: int):
