@@ -90,7 +90,7 @@ def get_out_path(data_path: str, search_space: str, initial_guess: str, guess_fo
 def get_starting_angles_col_name(initial_guess: str, p: int) -> str | None:
     if initial_guess == 'random':
         return None
-    elif initial_guess == 'interp':
+    elif initial_guess == 'interp' or initial_guess == 'combined':
         return f'p_{p - 1}_angles'
     elif initial_guess == 'explicit':
         return f'p_{p}_starting_angles'
@@ -108,6 +108,8 @@ def init_dataframe(initial_guess: str, data_path: str, num_graphs: int, out_path
     elif initial_guess == 'explicit':
         df = pd.read_csv(f'{data_path}/output/qaoa/interp/out.csv', index_col=0)
         df = df.filter(regex=r'p_\d+_angles').rename(columns=lambda name: f'{name[:-7]}_starting_angles')
+    elif initial_guess == 'combined':
+        df = pd.read_csv(f'{data_path}/output/qaoa/interp/out.csv', index_col=0)
     else:
         raise 'Unknown initial_guess'
     df.to_csv(out_path)
@@ -116,13 +118,13 @@ def init_dataframe(initial_guess: str, data_path: str, num_graphs: int, out_path
 def run_graphs_parallel():
     num_graphs = 1000
     num_workers = 20
-    worker = 'general'
-    search_space = 'gen1'
-    initial_guess = 'random'
-    guess_format = 'gen1'
-    nodes = list(range(9, 10))
+    worker = 'combined'
+    search_space = 'combined'
+    initial_guess = 'combined'
+    guess_format = 'qaoa'
+    nodes = list(range(10, 13))
     depths = list(range(3, 7))
-    ps = list(range(1, 6))
+    ps = list(range(2, 19))
     reader = partial(nx.read_gml, destringizer=int)
     copy_better = True
     convergence_threshold = 0.9995
@@ -135,7 +137,8 @@ def run_graphs_parallel():
             for p in ps:
                 starting_angles_col = get_starting_angles_col_name(initial_guess, p)
                 out_col_name = f'p_{p}'
-                rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
+                # rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
+                rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p - 1}'] >= df[f'p_{p}'])
                 copy_col = None if p == 1 else f'p_{p - 1}'
                 copy_p = p - 1
 

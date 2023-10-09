@@ -54,7 +54,7 @@ def worker_general_qaoa_sub(path: str, reader: callable, p: int):
     return path, *optimize_qaoa_angles(evaluator, num_restarts=1)
 
 
-def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: str, guess_format: str = None):
+def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: str, guess_format: str = None) -> tuple:
     """
     Worker function for non-generalized QAOA.
     :param data: Tuple of input data for the worker. Includes 1) Path to the input file; 2) Starting point for optimization (or None).
@@ -68,17 +68,15 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
     graph = reader(path)
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
 
-    if starting_point is None:
-        if guess_format == 'qaoa':
-            starting_point = np.random.uniform(-np.pi, np.pi, 2 * p)
-        elif guess_format == 'ma':
-            starting_point = np.random.uniform(-np.pi, np.pi, (len(graph) + len(graph.edges)) * p)
+    if starting_point is None and guess_format == 'qaoa':
+        starting_point = np.random.uniform(-np.pi, np.pi, 2 * p)
 
     if search_space == 'ma' and guess_format == 'qaoa':
         starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
 
-    method = 'Nelder-Mead' if starting_point[-1] == 0 else 'BFGS'
+    method = 'Nelder-Mead' if starting_point is not None and starting_point[-1] == 0 else 'BFGS'
     result = optimize_qaoa_angles(evaluator, starting_point=starting_point, method=method)
+    nfev = result.nfev
 
     if search_space == 'tqa' or search_space == 'linear':
         if search_space == 'tqa':
@@ -88,8 +86,34 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
 
         evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='qaoa')
         result = optimize_qaoa_angles(evaluator, starting_point=qaoa_angles)
+        nfev += result.nfev
 
-    return path, -result.fun / graph.graph['maxcut'], result.x, result.nfev
+    return path, -result.fun / graph.graph['maxcut'], result.x, nfev
+
+
+def worker_combined_qaoa(data: tuple, reader: callable, p: int) -> tuple:
+    """
+    Worker that tries multiple angle strategies for QAOA.
+    :param data: Tuple of 1) Path to the graph file; 2) Best AR found at level p - 1; 3) Corresponding angles
+    :param reader: Function that reads graph from the file.
+    :param p: Number of QAOA layers.
+    :return: 1) Path to processed file; 2) Approximation ratio; 3) Corresponding angles.
+    """
+    path, prev_ar, prev_angles = data
+    starting_angles = interp_qaoa_angles(prev_angles, p - 1)
+    path, next_ar, next_angles, nfev = worker_standard_qaoa((path, starting_angles), reader, p, 'qaoa', 'qaoa')
+    total_nfev = nfev
+    if next_ar <= prev_ar:
+        path, next_ar, next_angles, nfev = worker_standard_qaoa((path, None), reader, p, 'tqa', 'tqa')
+        total_nfev += nfev
+    if next_ar <= prev_ar:
+        path, next_ar, next_angles, nfev = worker_standard_qaoa((path, None), reader, p, 'qaoa', 'qaoa')
+        total_nfev += nfev
+    if next_ar <= prev_ar:
+        starting_angles = np.concatenate((prev_angles, [0] * 2))
+        path, next_ar, next_angles, nfev = worker_standard_qaoa((path, starting_angles), reader, p, 'qaoa', 'qaoa')
+        total_nfev += nfev
+    return path, next_ar, next_angles, total_nfev
 
 
 def worker_maxcut(path: str, reader: callable):
@@ -122,6 +146,10 @@ def select_worker_func(worker: str, reader: callable, p: int, search_space: str,
         worker_func = partial(worker_general_qaoa_sub, reader=reader, p=p)
     elif worker == 'standard':
         worker_func = partial(worker_standard_qaoa, reader=reader, p=p, search_space=search_space, guess_format=guess_format)
+    elif worker == 'combined':
+        worker_func = partial(worker_combined_qaoa, reader=reader, p=p)
+    else:
+        raise 'Unknown worker'
     return worker_func
 
 
@@ -140,10 +168,13 @@ def prepare_worker_data(input_df: DataFrame, rows: ndarray, initial_guess: str, 
 
     df = input_df.loc[rows, :]
     paths = df.index
-    if initial_guess == 'explicit' or initial_guess == 'interp':
+    if initial_guess == 'explicit' or initial_guess == 'interp' or initial_guess == 'combined':
         starting_angles = [numpy_str_to_array(angles_str) for angles_str in df[angles_col]]
         if initial_guess == 'interp':
             starting_angles = [interp_qaoa_angles(angles, p) for angles in starting_angles]
+        if initial_guess == 'combined':
+            ars = df[f'p_{p}']
+            return list(zip(paths, ars, starting_angles))
     elif initial_guess == 'random':
         starting_angles = [None] * len(paths)
     else:
@@ -192,6 +223,8 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     worker_data = prepare_worker_data(df, rows, initial_guess, angles_col, p - 1)
 
     if len(worker_data) == 0:
+        if out_col in df:
+            return
         results = [(path, *[np.nan] * (len(cols) - 1)) for path in df.index]
     else:
         worker_func = select_worker_func(worker, reader, p, search_space, guess_format)
