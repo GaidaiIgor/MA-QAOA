@@ -26,12 +26,13 @@ def worker_general_qaoa(data: tuple, reader: callable, p: int):
     """
     path, starting_point = data
     graph = reader(path)
+
     target_vals = evaluate_graph_cut(graph)
     driver_term_vals = np.array([evaluate_z_term(np.array(term), len(graph)) for term in it.combinations(range(len(graph)), 1)])
 
-    # driver_term_vals_2 = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
-    # # driver_term_vals_2 = np.array([evaluate_z_term(np.array(term), len(graph)) for term in it.combinations(range(len(graph)), 2)])
-    # driver_term_vals = np.append(driver_term_vals, driver_term_vals_2, axis=0)
+    driver_term_vals_2 = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
+    # driver_term_vals_2 = np.array([evaluate_z_term(np.array(term), len(graph)) for term in it.combinations(range(len(graph)), 2)])
+    driver_term_vals = np.append(driver_term_vals, driver_term_vals_2, axis=0)
 
     evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p)
     result = optimize_qaoa_angles(evaluator)
@@ -74,7 +75,7 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
     if search_space == 'ma' and guess_format == 'qaoa':
         starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
 
-    method = 'Nelder-Mead' if starting_point is not None and starting_point[-1] == 0 else 'BFGS'
+    method = 'Nelder-Mead' if starting_point is not None and any(starting_point == 0) else 'BFGS'
     result = optimize_qaoa_angles(evaluator, starting_point=starting_point, method=method)
     nfev = result.nfev
 
@@ -110,9 +111,13 @@ def worker_combined_qaoa(data: tuple, reader: callable, p: int) -> tuple:
         path, next_ar, next_angles, nfev = worker_standard_qaoa((path, None), reader, p, 'qaoa', 'qaoa')
         total_nfev += nfev
     if next_ar <= prev_ar:
-        starting_angles = np.concatenate((prev_angles, [0] * 2))
-        path, next_ar, next_angles, nfev = worker_standard_qaoa((path, starting_angles), reader, p, 'qaoa', 'qaoa')
-        total_nfev += nfev
+        for insert_layer in range(p):
+            starting_angles = np.concatenate((prev_angles[:2 * insert_layer], [0] * 2, prev_angles[2 * insert_layer:]))
+            path, layer_ar, layer_angles, nfev = worker_standard_qaoa((path, starting_angles), reader, p, 'qaoa', 'qaoa')
+            total_nfev += nfev
+            if next_ar <= layer_ar:
+                next_ar = layer_ar
+                next_angles = layer_angles
     return path, next_ar, next_angles, total_nfev
 
 

@@ -122,9 +122,9 @@ def run_graphs_parallel():
     search_space = 'combined'
     initial_guess = 'combined'
     guess_format = 'qaoa'
-    nodes = list(range(10, 13))
+    nodes = list(range(9, 10))
     depths = list(range(3, 7))
-    ps = list(range(2, 19))
+    ps = list(range(2, 25))
     reader = partial(nx.read_gml, destringizer=int)
     copy_better = True
     convergence_threshold = 0.9995
@@ -138,7 +138,7 @@ def run_graphs_parallel():
                 starting_angles_col = get_starting_angles_col_name(initial_guess, p)
                 out_col_name = f'p_{p}'
                 # rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
-                rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p - 1}'] >= df[f'p_{p}'])
+                rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)
                 copy_col = None if p == 1 else f'p_{p - 1}'
                 copy_p = p - 1
 
@@ -153,10 +153,15 @@ def run_graphs_parallel():
 
 
 def run_graph_sequential():
-    starting_angles = numpy_str_to_array('[ 1.3896995   1.81521346  0.32905467  0.80337469  0.22299807  0.35461214  0.06168871 -0.40208917 -0.51137584 -1.82957246]')
-    p = 6
-    starting_angles = interp_qaoa_angles(starting_angles, p - 1)
-    data = ('graphs/new/nodes_12/depth_3/217.gml', None)
+    starting_angles = numpy_str_to_array('[-4.54992896e+00  1.38213194e+00 -4.78739633e+00  1.10957815e+00 -4.64460145e+00  1.71074627e+00 -4.56526138e+00  1.23540832e+00 '
+                                         '-4.66688927e+00  1.34059128e+00 -4.50977178e+00  1.31694875e+00 -4.60401055e+00  1.45413921e+00 -4.53122317e+00  1.34898498e+00 '
+                                         '-4.56927684e+00  1.49917922e+00 -4.52673798e+00  1.39349468e+00 -4.27775638e+00  1.46940176e+00 -4.68488557e+00  6.74018259e-01 '
+                                         '-4.73858992e+00  8.94675413e-01 -5.19731797e+00  2.32046002e+00 -4.72171445e+00  2.41553903e+00  1.80698688e-02 -4.19531736e-02  '
+                                         '1.05459646e-03 -1.64588311e-02  9.69408824e-04 -8.69544904e-04]')
+    p = 19
+    # starting_angles = interp_qaoa_angles(starting_angles, p - 1)
+    starting_angles = np.concatenate((starting_angles[:-6], [0] * 2, starting_angles[-6:]))
+    data = ('graphs/new/nodes_9/depth_3/675.gml', starting_angles)
     reader = partial(nx.read_gml, destringizer=int)
 
     search_space = 'qaoa'
@@ -192,7 +197,7 @@ if __name__ == '__main__':
     # df = calculate_min_p(df)
 
     # run_merge()
-    # run_graph_sequential()
+    run_graph_sequential()
     # generate_graphs()
     # run_graphs_init()
-    run_graphs_parallel()
+    # run_graphs_parallel()
