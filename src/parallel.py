@@ -1,4 +1,5 @@
 import itertools as it
+import re
 from functools import partial
 from multiprocessing import Pool
 
@@ -55,7 +56,7 @@ def worker_general_qaoa_sub(path: str, reader: callable, p: int):
     return path, *optimize_qaoa_angles(evaluator, num_restarts=1)
 
 
-def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: str, guess_format: str = None, apply_y: bool = False) -> tuple:
+def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: str, guess_format: str = None) -> tuple:
     """
     Worker function for non-generalized QAOA.
     :param data: Tuple of input data for the worker. Includes 1) Path to the input file; 2) Starting point for optimization (or None).
@@ -68,12 +69,12 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
     """
     path, starting_point = data
     graph = reader(path)
-    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space, apply_y=apply_y)
+    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
 
     if starting_point is None and guess_format == 'qaoa':
         starting_point = np.random.uniform(-np.pi, np.pi, 2 * p)
 
-    if search_space == 'ma' and guess_format == 'qaoa':
+    if (search_space == 'ma' or search_space == 'xqaoa') and guess_format == 'qaoa':
         starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
 
     method = 'Nelder-Mead' if starting_point is not None and any(starting_point == 0) else 'BFGS'
@@ -86,7 +87,7 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
         elif search_space == 'linear':
             qaoa_angles = convert_angles_linear_qaoa(result.x, p)
 
-        evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='qaoa', apply_y=apply_y)
+        evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='qaoa')
         result = optimize_qaoa_angles(evaluator, starting_point=qaoa_angles)
         nfev += result.nfev
 
@@ -136,15 +137,14 @@ def worker_maxcut(path: str, reader: callable):
     nx.write_gml(graph, path)
 
 
-def select_worker_func(worker: str, reader: callable, p: int, search_space: str, guess_format: str, apply_y: bool):
+def select_worker_func(worker: str, reader: callable, p: int, search_space: str, guess_format: str):
     """
     Selects worker function based on arguments and binds all arguments except the input path.
     :param worker: Name of worker.
     :param reader: Function that reads graph from the file.
     :param p: Number of QAOA layers.
-    :param search_space: Name of angle search space (ma, qaoa, linear, tqa).
+    :param search_space: Name of angle search space (xqaoa, ma, qaoa, linear, tqa).
     :param guess_format: Name of format of starting point (same options as for search space).
-    :param apply_y: True to apply a layer of Y-mixers with the same angles.
     :return: Bound worker function.
     """
     if worker == 'general':
@@ -152,7 +152,7 @@ def select_worker_func(worker: str, reader: callable, p: int, search_space: str,
     elif worker == 'general_sub':
         worker_func = partial(worker_general_qaoa_sub, reader=reader, p=p)
     elif worker == 'standard':
-        worker_func = partial(worker_standard_qaoa, reader=reader, p=p, search_space=search_space, guess_format=guess_format, apply_y=apply_y)
+        worker_func = partial(worker_standard_qaoa, reader=reader, p=p, search_space=search_space, guess_format=guess_format)
     elif worker == 'combined':
         worker_func = partial(worker_combined_qaoa, reader=reader, p=p)
     else:
@@ -205,7 +205,7 @@ def calculate_maxcut_parallel(paths: list[str], num_workers: int, reader: callab
 
 
 def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_workers: int, worker: str, reader: callable, search_space: str, p: int, initial_guess: str,
-                                  guess_format: str, apply_y: bool, angles_col: str | None, copy_col: str | None, copy_p: int, copy_better: bool, out_col: str):
+                                  guess_format: str, angles_col: str | None, copy_col: str | None, copy_p: int, copy_better: bool, out_col: str):
     """
     Optimizes cut expectation for a given set of graphs in parallel and writes the output dataframe.
     :param dataframe_path: Path to input dataframe with information about jobs.
@@ -217,7 +217,6 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     :param p: Number of QAOA layers.
     :param initial_guess: Initial guess strategy (random, explicit or interp).
     :param guess_format: Name of format of starting point (same options as for search space).
-    :param apply_y: True to apply a layer of Y-mixers with the same angles.
     :param angles_col: Name of column in df with initial angles for optimization.
     :param copy_col: Name of the column from where expectation should be copied if it was not calculated in the current round (=None).
     :param copy_p: Value of p for the copy column. If current p is different, the copied angles will be appended with 0 to keep the angle format consistent.
@@ -235,7 +234,7 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
             return
         results = [(path, *[np.nan] * (len(cols) - 1)) for path in df.index]
     else:
-        worker_func = select_worker_func(worker, reader, p, search_space, guess_format, apply_y)
+        worker_func = select_worker_func(worker, reader, p, search_space, guess_format)
         results = []
         with Pool(num_workers) as pool:
             for result in tqdm(pool.imap(worker_func, worker_data), total=len(worker_data), smoothing=0, ascii=' █'):
@@ -247,5 +246,6 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     df = df.join(new_df[new_df.columns.difference(df.columns)])
     df = copy_expectation_column(df, copy_better, copy_col, out_col, copy_p, p)
 
-    print(f'path: {dataframe_path}; p: {p}; mean: {np.mean(df[out_col])}; converged: {sum(df[out_col] > 0.9995)}; nfev: {np.mean(df[f"{out_col}_nfev"]):.0f}\n')
+    dataset_id = re.search(r'nodes_\d+/depth_\d+', dataframe_path)[0]
+    print(f'dataset: {dataset_id}; p: {p}; mean: {np.mean(df[out_col])}; converged: {sum(df[out_col] > 0.9995)}; nfev: {np.mean(df[f"{out_col}_nfev"]):.0f}\n')
     df.to_csv(dataframe_path)

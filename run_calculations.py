@@ -77,7 +77,7 @@ def run_graphs_init():
 
 def get_out_path(data_path: str, search_space: str, initial_guess: str, guess_format: str, p: int = None) -> str:
     out_path = f'{data_path}/output/{search_space}'
-    if search_space == 'ma' or search_space == 'qaoa':
+    if search_space == 'ma' or search_space == 'qaoa' or search_space == 'xqaoa':
         out_path = f'{out_path}/{initial_guess}'
     if search_space == 'ma' and initial_guess == 'random':
         out_path = f'{out_path}/{guess_format}'
@@ -118,13 +118,13 @@ def init_dataframe(initial_guess: str, data_path: str, num_graphs: int, out_path
 def run_graphs_parallel():
     num_graphs = 1000
     num_workers = 20
-    worker = 'combined'
-    search_space = 'combined'
-    initial_guess = 'combined'
+    worker = 'standard'
+    search_space = 'xqaoa'
+    initial_guess = 'explicit'
     guess_format = 'qaoa'
-    nodes = list(range(10, 13))
+    nodes = list(range(9, 10))
     depths = list(range(3, 7))
-    ps = list(range(11, 16))
+    ps = list(range(1, 6))
     reader = partial(nx.read_gml, destringizer=int)
     copy_better = True
     convergence_threshold = 0.9995
@@ -138,8 +138,8 @@ def run_graphs_parallel():
 
                 starting_angles_col = get_starting_angles_col_name(initial_guess, p)
                 out_col_name = f'p_{p}'
-                # rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
-                rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)
+                rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
+                # rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)
                 copy_col = None if p == 1 else f'p_{p - 1}'
                 copy_p = p - 1
 
