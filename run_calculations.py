@@ -122,19 +122,20 @@ def run_graphs_parallel():
     search_space = 'combined'
     initial_guess = 'combined'
     guess_format = 'qaoa'
-    nodes = list(range(9, 10))
+    nodes = list(range(10, 13))
     depths = list(range(3, 7))
-    ps = list(range(2, 25))
+    ps = list(range(11, 16))
     reader = partial(nx.read_gml, destringizer=int)
     copy_better = True
     convergence_threshold = 0.9995
 
-    for node in nodes:
-        node_depths = [3] if node < 12 else depths
-        for depth in node_depths:
-            data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
-            out_path = get_out_path(data_path, search_space, initial_guess, guess_format)
-            for p in ps:
+    for p in ps:
+        for node in nodes:
+            node_depths = [3] if node < 12 else depths
+            for depth in node_depths:
+                data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
+                out_path = get_out_path(data_path, search_space, initial_guess, guess_format)
+
                 starting_angles_col = get_starting_angles_col_name(initial_guess, p)
                 out_col_name = f'p_{p}'
                 # rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
@@ -197,7 +198,7 @@ if __name__ == '__main__':
     # df = calculate_min_p(df)
 
     # run_merge()
-    run_graph_sequential()
+    # run_graph_sequential()
     # generate_graphs()
     # run_graphs_init()
-    # run_graphs_parallel()
+    run_graphs_parallel()

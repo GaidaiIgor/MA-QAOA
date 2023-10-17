@@ -7,7 +7,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from numpy import ndarray
-from pandas import DataFrame, Series
+from pandas import DataFrame
 
 from src.graph_utils import get_edge_diameter
 

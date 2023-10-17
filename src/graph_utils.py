@@ -2,7 +2,7 @@
 Graph utilities.
 """
 from queue import SimpleQueue
-from typing import Iterable, Collection, Sequence
+from typing import Sequence
 
 import networkx as nx
 import numpy as np
@@ -97,7 +97,9 @@ def read_graph_xqaoa(path):
     with open(path) as f:
         lines = f.readlines()
     lines = lines[2:]
-    return nx.read_edgelist(lines, delimiter=',')
+    graph = nx.read_edgelist(lines, delimiter=',', nodetype=int)
+    nx.set_edge_attributes(graph, 1, 'weight')
+    return graph
 
 
 def is_isomorphic(graph: Graph, other_graphs: Sequence) -> bool:
