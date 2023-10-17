@@ -65,34 +65,36 @@ class Evaluator:
         return Evaluator(change_sign(ma_qaoa_func), num_angles)
 
     @staticmethod
-    def get_evaluator_general(target_vals: ndarray, driver_term_vals: ndarray, p: int, search_space: str = 'ma') -> Evaluator:
+    def get_evaluator_general(target_vals: ndarray, driver_term_vals: ndarray, p: int, search_space: str = 'ma', apply_y: bool = False) -> Evaluator:
         """
         Returns evaluator of target expectation calculated through simulation.
         :param target_vals: Values of the target function at each computational basis.
         :param driver_term_vals: 2D array of size #terms x 2 ** #qubits. Each row is an array of values of a driver function's term for each computational basis.
         :param p: Number of QAOA layers.
         :param search_space: Name of the strategy to choose the number of variable parameters.
+        :param apply_y: True to apply a layer of Y-mixers with the same angles.
         :return: Simulation evaluator. The order of input parameters: first, driver term angles for 1st layer in the same order as rows of driver_term_vals,
         then mixer angles for 1st layer in the qubits order, then the same format repeats for other layers.
         """
-        func = lambda angles: calc_expectation_general_qaoa(angles, driver_term_vals, p, target_vals)
+        func = lambda angles: calc_expectation_general_qaoa(angles, driver_term_vals, p, target_vals, apply_y)
         num_qubits = len(target_vals).bit_length() - 1
         return Evaluator.wrap_parameter_strategy(func, num_qubits, driver_term_vals.shape[0], p, search_space)
 
     @staticmethod
-    def get_evaluator_standard_maxcut(graph: Graph, p: int, edge_list: list[tuple[int, int]] = None, search_space: str = 'ma') -> Evaluator:
+    def get_evaluator_standard_maxcut(graph: Graph, p: int, edge_list: list[tuple[int, int]] = None, search_space: str = 'ma', apply_y: bool = False) -> Evaluator:
         """
         Returns an instance of general evaluator where the target function is the cut function and the driver function includes the existing edge terms only.
         :param graph: Graph for MaxCut problem.
         :param p: Number of QAOA layers.
         :param edge_list: List of edges that should be taken into account when calculating expectation value. If None, then all edges are taken into account.
         :param search_space: Name of the strategy to choose the number of variable parameters.
+        :param apply_y: True to apply a layer of Y-mixers with the same angles.
         :return: Simulation evaluator. The order of input parameters: first, edge angles for 1st layer in the order of graph.edges, then node angles for the 1st layer in the order
         of graph.nodes. Then the format repeats for the remaining p - 1 layers.
         """
         target_vals = evaluate_graph_cut(graph, edge_list)
         driver_term_vals = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
-        return Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, search_space)
+        return Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, search_space, apply_y)
 
     @staticmethod
     def get_evaluator_general_subsets(num_qubits: int, target_terms: list[set[int]], target_coeffs: list[float], driver_terms: list[set[int]], p: int,

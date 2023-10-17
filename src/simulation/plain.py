@@ -27,12 +27,21 @@ def apply_driver(term_angles: ndarray, term_vals: ndarray, psi: ndarray) -> ndar
 @njit
 def get_exp_x(beta: float) -> ndarray:
     """
-    Returns mixer matrix for 1 qubit.
     :param beta: Rotation angle.
-    :return: Mixer matrix for 1 qubit, i.e. exp(-i*beta*X).
+    :return: Matrix representation for exp(-i * beta * X).
     """
     return np.array([[cos(beta), -1j * sin(beta)],
                      [-1j * sin(beta), cos(beta)]])
+
+
+@njit
+def get_exp_y(alpha: float) -> ndarray:
+    """
+    :param alpha: Rotation angle.
+    :return: Matrix representation for exp(-i * beta * Y).
+    """
+    return np.array([[cos(alpha), -sin(alpha)],
+                     [sin(alpha), cos(alpha)]])
 
 
 @njit
@@ -56,16 +65,20 @@ def apply_unitary_one_qubit(unitary: ndarray, psi: ndarray, bit_ind: int, num_bi
 
 
 @njit
-def apply_mixer_individual(betas: ndarray, psi: ndarray) -> ndarray:
+def apply_mixer_individual(betas: ndarray, psi: ndarray, apply_y: bool = False) -> ndarray:
     """
     Applies mixer unitary to a given state psi. Does not explicitly create the mixer matrix. Instead, applies single-qubit unitaries to each qubit independently.
     :param betas: 1D array with rotation angles for each qubit. Size: number of qubits.
     :param psi: Current quantum state vector.
+    :param apply_y: True to apply a layer of Y-mixers with the same angles.
     :return: New quantum state vector.
     """
     for i in range(len(betas)):
         exp_x = get_exp_x(betas[i])
         psi = apply_unitary_one_qubit(exp_x, psi, i, len(betas))
+        if apply_y:
+            exp_y = get_exp_y(betas[i])
+            psi = apply_unitary_one_qubit(exp_y, psi, i, len(betas))
     return psi
 
 
@@ -96,12 +109,13 @@ def calc_expectation_per_edge(psi: ndarray, graph: Graph) -> list[float]:
 
 
 @njit
-def construct_qaoa_state(angles: ndarray, driver_term_vals: ndarray, p: int) -> ndarray:
+def construct_qaoa_state(angles: ndarray, driver_term_vals: ndarray, p: int, apply_y: bool = False) -> ndarray:
     """
     Constructs QAOA state corresponding to the given angles and terms, assuming standard initial state.
     :param angles: 1D array of angles for all layers. Same format as in `calc_expectation_general_qaoa`.
     :param driver_term_vals: 2D array of size #terms x 2 ** #qubits. Each row is an array of values of a driver function's term for each computational basis.
     :param p: Number of QAOA layers.
+    :param apply_y: True to apply a layer of Y-mixers with the same angles.
     :return: Resulting quantum state vector.
     """
     psi = np.ones(driver_term_vals.shape[1], dtype=np.complex128) / np.sqrt(driver_term_vals.shape[1])
@@ -111,11 +125,11 @@ def construct_qaoa_state(angles: ndarray, driver_term_vals: ndarray, p: int) -> 
         gammas = layer_params[:driver_term_vals.shape[0]]
         psi = apply_driver(gammas, driver_term_vals, psi)
         betas = layer_params[driver_term_vals.shape[0]:]
-        psi = apply_mixer_individual(betas, psi)
+        psi = apply_mixer_individual(betas, psi, apply_y)
     return psi
 
 
-def calc_expectation_general_qaoa(angles: ndarray, driver_term_vals: ndarray, p: int, target_vals: ndarray) -> float:
+def calc_expectation_general_qaoa(angles: ndarray, driver_term_vals: ndarray, p: int, target_vals: ndarray, apply_y: bool = False) -> float:
     """
     Calculates target function expectation value for given set of driver terms and corresponding weights.
     :param angles: 1D array of angles for all layers. Format: first, term angles for 1st layer in the same order as rows of driver_term_vals,
@@ -123,9 +137,10 @@ def calc_expectation_general_qaoa(angles: ndarray, driver_term_vals: ndarray, p:
     :param driver_term_vals: 2D array of size #terms x 2 ** #qubits. Each row is an array of values of a driver function's term for each computational basis.
     :param p: Number of QAOA layers.
     :param target_vals: 1D array of target function values for all computational basis states.
+    :param apply_y: True to apply a layer of Y-mixers with the same angles.
     :return: Expectation value of the target function in the state corresponding to the given parameters and terms.
     """
-    psi = construct_qaoa_state(angles, driver_term_vals, p)
+    psi = construct_qaoa_state(angles, driver_term_vals, p, apply_y)
     expectation = calc_expectation_diagonal(psi, target_vals)
     return expectation
 
