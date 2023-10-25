@@ -141,19 +141,19 @@ def worker_combined_qaoa(data: tuple, reader: callable, p: int) -> tuple:
     :param p: Number of QAOA layers.
     :return: 1) Path to processed file; 2) Approximation ratio; 3) Corresponding angles.
     """
-    path, prev_ar, prev_angles = data
-    path, next_ar, next_angles, nfev = worker_interp((path, prev_angles), reader, p)
-    total_nfev = nfev
-    if next_ar <= prev_ar:
-        path, next_ar, next_angles, nfev = worker_linear((path, ), reader, p, 'tqa')
-        total_nfev += nfev
-    if next_ar <= prev_ar:
-        path, next_ar, next_angles, nfev = worker_standard_qaoa((path, None), reader, p, 'qaoa')
-        total_nfev += nfev
-    if next_ar <= prev_ar:
-        path, next_ar, next_angles, nfev = worker_greedy((path, prev_angles), reader, p)
-        total_nfev += nfev
-    return path, next_ar, next_angles, total_nfev
+    path, prev_angles = data
+    num_strategies = 4
+    ars = [0] * num_strategies
+    angles = [0] * num_strategies
+    nfevs = [0] * num_strategies
+
+    _, ars[0], angles[0], nfevs[0] = worker_interp((path, prev_angles), reader, p)
+    _, ars[1], angles[1], nfevs[1] = worker_linear((path,), reader, p, 'tqa')
+    _, ars[2], angles[2], nfevs[2] = worker_standard_qaoa((path, None), reader, p, 'qaoa')
+    _, ars[3], angles[3], nfevs[3] = worker_greedy((path, prev_angles), reader, p)
+
+    best_index = np.argmax(ars)
+    return path, ars[best_index], angles[best_index], sum(nfevs)
 
 
 def worker_maqaoa(data: tuple, reader: callable, p: int, guess_format: str) -> tuple:
@@ -206,6 +206,8 @@ def select_worker_func(worker: str, reader: callable, p: int, search_space: str,
         worker_func = partial(worker_standard_qaoa, reader=reader, p=p, search_space=search_space)
     elif worker == 'interp':
         worker_func = partial(worker_interp, reader=reader, p=p)
+    elif worker == 'linear':
+        worker_func = partial(worker_linear, reader=reader, p=p, search_space=search_space)
     elif worker == 'greedy':
         worker_func = partial(worker_greedy, reader=reader, p=p)
     elif worker == 'combined':
@@ -217,15 +219,13 @@ def select_worker_func(worker: str, reader: callable, p: int, search_space: str,
     return worker_func
 
 
-def prepare_worker_data(worker: str, input_df: DataFrame, rows: ndarray, initial_guess: str, angles_col: str, p: int) -> list[tuple]:
+def prepare_worker_data(input_df: DataFrame, rows: ndarray, initial_guess: str, angles_col: str) -> list[tuple]:
     """
     Prepares input data for workers.
-    :param worker: Name of the worker.
     :param input_df: Dataframe with input data.
     :param rows: Array that identifies which rows of input_df should be considered.
     :param initial_guess: Initial guess strategy (random, explicit or interp).
     :param angles_col: Name of column in input_df with initial angles for optimization.
-    :param p: Value of p for the initial angles.
     :return: List of tuples with worker data.
     """
     if rows is None:
@@ -235,9 +235,6 @@ def prepare_worker_data(worker: str, input_df: DataFrame, rows: ndarray, initial
     paths = df.index
     if initial_guess == 'explicit':
         starting_angles = [numpy_str_to_array(angles_str) for angles_str in df[angles_col]]
-        if worker == 'combined':
-            ars = df[f'p_{p}']
-            return list(zip(paths, ars, starting_angles))
     elif initial_guess == 'random':
         starting_angles = [None] * len(paths)
     else:
@@ -283,7 +280,7 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     df = pd.read_csv(dataframe_path, index_col=0)
     rows = rows_func(df)
     cols = ['path', out_col, f'{out_col}_angles', f'{out_col}_nfev']
-    worker_data = prepare_worker_data(worker, df, rows, initial_guess, angles_col, p - 1)
+    worker_data = prepare_worker_data(df, rows, initial_guess, angles_col)
 
     if len(worker_data) == 0:
         if out_col in df:
