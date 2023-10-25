@@ -87,10 +87,10 @@ def get_out_path(data_path: str, search_space: str, initial_guess: str, guess_fo
     return out_path
 
 
-def get_starting_angles_col_name(initial_guess: str, p: int) -> str | None:
+def get_starting_angles_col_name(worker: str, initial_guess: str, p: int) -> str | None:
     if initial_guess == 'random':
         return None
-    elif initial_guess == 'interp' or initial_guess == 'combined':
+    elif initial_guess == 'interp' or initial_guess == 'combined' or worker == 'greedy':
         return f'p_{p - 1}_angles'
     elif initial_guess == 'explicit':
         return f'p_{p}_starting_angles'
@@ -98,11 +98,11 @@ def get_starting_angles_col_name(initial_guess: str, p: int) -> str | None:
         raise 'Unknown initial_guess'
 
 
-def init_dataframe(initial_guess: str, data_path: str, num_graphs: int, out_path: str):
+def init_dataframe(worker: str, initial_guess: str, data_path: str, num_graphs: int, out_path: str):
     if initial_guess == 'random':
         paths = [f'{data_path}/{i}.gml' for i in range(num_graphs)]
         df = DataFrame(paths).set_axis(['path'], axis=1).set_index('path')
-    elif initial_guess == 'interp':
+    elif initial_guess == 'interp' or worker == 'greedy':
         df = pd.read_csv(f'{data_path}/output/qaoa/random/p_1/out.csv', index_col=0)
         df = df.filter(regex='r_10').rename(columns=lambda name: f'p_1{name[4:]}')
     elif initial_guess == 'explicit':
@@ -118,13 +118,13 @@ def init_dataframe(initial_guess: str, data_path: str, num_graphs: int, out_path
 def run_graphs_parallel():
     num_graphs = 1000
     num_workers = 20
-    worker = 'standard'
-    search_space = 'xqaoa'
+    worker = 'greedy'
+    search_space = 'qaoa'
     initial_guess = 'explicit'
     guess_format = 'qaoa'
     nodes = list(range(9, 10))
     depths = list(range(3, 7))
-    ps = list(range(1, 6))
+    ps = list(range(2, 11))
     reader = partial(nx.read_gml, destringizer=int)
     copy_better = True
     convergence_threshold = 0.9995
@@ -136,7 +136,7 @@ def run_graphs_parallel():
                 data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
                 out_path = get_out_path(data_path, search_space, initial_guess, guess_format)
 
-                starting_angles_col = get_starting_angles_col_name(initial_guess, p)
+                starting_angles_col = get_starting_angles_col_name(worker, initial_guess, p)
                 out_col_name = f'p_{p}'
                 rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
                 # rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)
@@ -147,7 +147,7 @@ def run_graphs_parallel():
                 if not path.exists(out_folder):
                     os.makedirs(path.split(out_path)[0])
                 if not path.exists(out_path):
-                    init_dataframe(initial_guess, data_path, num_graphs, out_path)
+                    init_dataframe(worker, initial_guess, data_path, num_graphs, out_path)
 
                 optimize_expectation_parallel(out_path, rows_func, num_workers, worker, reader, search_space, p, initial_guess, guess_format, starting_angles_col,
                                               copy_col, copy_p, copy_better, out_col_name)

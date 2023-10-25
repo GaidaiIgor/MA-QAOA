@@ -125,7 +125,7 @@ def run_gradient():
 def run_optimization():
     graph = nx.read_gml('graphs/nodes_8/ed_4/20.gml', destringizer=int)
     # graph = nx.complete_graph(3)
-    graph = read_graph_xqaoa('graphs/xqaoa/G10#128_1.csv')
+    graph = read_graph_xqaoa('graphs/xqaoa/G6#128_1.csv')
     p = 1
     search_space = 'ma'
 
@@ -146,10 +146,10 @@ def run_optimization():
     # evaluator = Evaluator.get_evaluator_qiskit_fast(graph, p, search_space)
     evaluator = Evaluator.get_evaluator_standard_maxcut_analytical(graph, use_multi_angle=True)
 
-    starting_point = np.array([-1.195, 0.124])
+    starting_point = np.array([-0.867, 0.623])
     starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
 
-    result = optimize_qaoa_angles(evaluator, starting_point=None)
+    result = optimize_qaoa_angles(evaluator, starting_point=starting_point)
 
     # objective_best = optimize_angles_ma_qiskit(graph, p)
 
