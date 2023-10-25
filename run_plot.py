@@ -166,9 +166,9 @@ def plot_avg_ar_vs_p_interp_edges():
     plt.show()
 
 
-def plot_min_ar_vs_p_interp_nodes():
-    nodes = range(9, 13)
-    methods = ['combined/out.csv', 'ma/explicit/out.csv']
+def plot_min_ar_vs_p_nodes():
+    nodes = range(9, 10)
+    methods = ['qaoa/greedy/out.csv', 'ma/explicit/out.csv']
     lines = []
     markers = 'oX'
     for method_ind, method in enumerate(methods):
@@ -176,7 +176,7 @@ def plot_min_ar_vs_p_interp_nodes():
             ps, p_series = get_column_statistic(f'graphs/new/nodes_{n}/depth_3/output/{method}', r'p_\d+$', min)
             line_style = '-' if method_ind < 2 else '--'
             lines.append(Line(ps, p_series, colors[n_ind], markers[method_ind], line_style))
-    x_lim = [0.75, 24.25]
+    x_lim = [0.75, 10.25]
     plot_general(lines, ('p', 'Min AR'), (1, 0.02), (*x_lim, None, 1.0025))
     plt.legend([f'{x} nodes' for x in nodes], loc='lower right', fontsize='small')
     plt.plot(x_lim, [1, 1], 'k--')
@@ -483,8 +483,8 @@ if __name__ == "__main__":
 
     # plot_avg_ar_vs_p_interp_nodes()
     # plot_avg_ar_vs_p_interp_edges()
-    # plot_min_ar_vs_p_interp_nodes()
-    plot_min_ar_vs_p_interp_edges()
+    plot_min_ar_vs_p_nodes()
+    # plot_min_ar_vs_p_interp_edges()
     # plot_avg_ar_vs_p_experimental_test()
     # plot_min_ar_vs_p_experimental_test()
     # plot_avg_ar_vs_cost_interp_nodes()

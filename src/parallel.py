@@ -243,20 +243,6 @@ def prepare_worker_data(input_df: DataFrame, rows: ndarray, initial_guess: str, 
     return list(zip(paths, starting_angles))
 
 
-def calculate_maxcut_parallel(paths: list[str], num_workers: int, reader: callable):
-    """
-    Calculates maxcut for all graphs specified in paths are writes it to the graph file.
-    :param paths: List of paths to graphs to calculate maxcut.
-    :param num_workers: Number of parallel workers.
-    :param reader: Function that reads graph from the file.
-    :return: None
-    """
-    worker_func = partial(worker_maxcut, reader=reader)
-    with Pool(num_workers) as pool:
-        for _ in tqdm(pool.imap(worker_func, paths), total=len(paths), smoothing=0, ascii=' █'):
-            pass
-
-
 def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_workers: int, worker: str, reader: callable, search_space: str, p: int, initial_guess: str,
                                   guess_format: str, angles_col: str | None, copy_col: str | None, copy_p: int, copy_better: bool, out_col: str):
     """
@@ -302,3 +288,17 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     dataset_id = re.search(r'nodes_\d+/depth_\d+', dataframe_path)[0]
     print(f'dataset: {dataset_id}; p: {p}; mean: {np.mean(df[out_col])}; converged: {sum(df[out_col] > 0.9995)}; nfev: {np.mean(df[f"{out_col}_nfev"]):.0f}\n')
     df.to_csv(dataframe_path)
+
+
+def calculate_maxcut_parallel(paths: list[str], num_workers: int, reader: callable):
+    """
+    Calculates maxcut for all graphs specified in paths are writes it to the graph file.
+    :param paths: List of paths to graphs to calculate maxcut.
+    :param num_workers: Number of parallel workers.
+    :param reader: Function that reads graph from the file.
+    :return: None
+    """
+    worker_func = partial(worker_maxcut, reader=reader)
+    with Pool(num_workers) as pool:
+        for _ in tqdm(pool.imap(worker_func, paths), total=len(paths), smoothing=0, ascii=' █'):
+            pass

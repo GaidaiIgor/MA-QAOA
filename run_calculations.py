@@ -75,14 +75,23 @@ def run_graphs_init():
         calculate_maxcut_parallel(paths, num_workers, reader)
 
 
-def get_out_path(data_path: str, search_space: str, initial_guess: str, guess_format: str, p: int = None) -> str:
+def get_out_path(data_path: str, search_space: str, worker: str, initial_guess: str, guess_format: str, p: int = None) -> str:
     out_path = f'{data_path}/output/{search_space}'
-    if search_space == 'ma' or search_space == 'qaoa' or search_space == 'xqaoa':
+
+    if search_space == 'qaoa':
+        if worker == 'standard':
+            out_path = f'{out_path}/random'
+        else:
+            out_path = f'{out_path}/{worker}'
+
+    elif search_space == 'ma':
         out_path = f'{out_path}/{initial_guess}'
-    if search_space == 'ma' and initial_guess == 'random':
-        out_path = f'{out_path}/{guess_format}'
+        if initial_guess == 'random':
+            out_path = f'{out_path}/{guess_format}'
+
     if p is not None:
         out_path = f'{out_path}/p_{p}'
+
     out_path = f'{out_path}/out.csv'
     return out_path
 
@@ -90,9 +99,9 @@ def get_out_path(data_path: str, search_space: str, initial_guess: str, guess_fo
 def get_starting_angles_col_name(worker: str, initial_guess: str, p: int) -> str | None:
     if initial_guess == 'random':
         return None
-    elif initial_guess == 'interp' or initial_guess == 'combined' or worker == 'greedy':
+    elif worker == 'interp' or worker == 'greedy' or worker == 'combined':
         return f'p_{p - 1}_angles'
-    elif initial_guess == 'explicit':
+    elif worker == 'ma':
         return f'p_{p}_starting_angles'
     else:
         raise 'Unknown initial_guess'
@@ -102,13 +111,13 @@ def init_dataframe(worker: str, initial_guess: str, data_path: str, num_graphs: 
     if initial_guess == 'random':
         paths = [f'{data_path}/{i}.gml' for i in range(num_graphs)]
         df = DataFrame(paths).set_axis(['path'], axis=1).set_index('path')
-    elif initial_guess == 'interp' or worker == 'greedy':
+    elif worker == 'interp' or worker == 'greedy':
         df = pd.read_csv(f'{data_path}/output/qaoa/random/p_1/out.csv', index_col=0)
         df = df.filter(regex='r_10').rename(columns=lambda name: f'p_1{name[4:]}')
-    elif initial_guess == 'explicit':
+    elif worker == 'ma':
         df = pd.read_csv(f'{data_path}/output/qaoa/interp/out.csv', index_col=0)
         df = df.filter(regex=r'p_\d+_angles').rename(columns=lambda name: f'{name[:-7]}_starting_angles')
-    elif initial_guess == 'combined':
+    elif worker == 'combined':
         df = pd.read_csv(f'{data_path}/output/qaoa/interp/out.csv', index_col=0)
     else:
         raise 'Unknown initial_guess'
@@ -134,7 +143,7 @@ def run_graphs_parallel():
             node_depths = [3] if node < 12 else depths
             for depth in node_depths:
                 data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
-                out_path = get_out_path(data_path, search_space, initial_guess, guess_format)
+                out_path = get_out_path(data_path, search_space, worker, initial_guess, guess_format)
 
                 starting_angles_col = get_starting_angles_col_name(worker, initial_guess, p)
                 out_col_name = f'p_{p}'
