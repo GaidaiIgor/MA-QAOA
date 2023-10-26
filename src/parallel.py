@@ -289,7 +289,8 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     df = copy_expectation_column(df, copy_better, copy_col, out_col, copy_p, p)
 
     dataset_id = re.search(r'nodes_\d+/depth_\d+', dataframe_path)[0]
-    print(f'dataset: {dataset_id}; p: {p}; mean: {np.mean(df[out_col])}; converged: {sum(df[out_col] > 0.9995)}; nfev: {np.mean(df[f"{out_col}_nfev"]):.0f}\n')
+    print(f'dataset: {dataset_id}; p: {p}; mean: {np.mean(df[out_col]):.3f}; min: {min(df[out_col]):.3f}; converged: {sum(df[out_col] > 0.9995)}; '
+          f'nfev: {np.mean(df[f"{out_col}_nfev"]):.0f}\n')
     df.to_csv(dataframe_path)
 
 

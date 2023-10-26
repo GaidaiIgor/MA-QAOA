@@ -147,8 +147,11 @@ def run_graphs_parallel():
 
                 starting_angles_col = get_starting_angles_col_name(worker, initial_guess, p)
                 out_col_name = f'p_{p}'
+
                 rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
                 # rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)
+                rows_func = lambda df: (df[f'p_{p}'] < convergence_threshold) & ((df[f'p_{p}_nfev'] == 1000 * p) | (df[f'p_{p}'] < df[f'p_{p - 1}']))
+
                 copy_col = None if p == 1 else f'p_{p - 1}'
                 copy_p = p - 1
 
@@ -199,7 +202,7 @@ if __name__ == '__main__':
     # df = calculate_min_p(df)
 
     # run_merge()
-    run_graph_sequential()
+    # run_graph_sequential()
     # generate_graphs()
     # run_graphs_init()
-    # run_graphs_parallel()
+    run_graphs_parallel()
