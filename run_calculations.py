@@ -133,7 +133,7 @@ def run_graphs_parallel():
     guess_format = 'qaoa'
     nodes = list(range(9, 10))
     depths = list(range(3, 7))
-    ps = list(range(2, 11))
+    ps = list(range(2, 13))
     reader = partial(nx.read_gml, destringizer=int)
     copy_better = True
     convergence_threshold = 0.9995
@@ -163,9 +163,10 @@ def run_graphs_parallel():
 
 
 def run_graph_sequential():
-    starting_angles = numpy_str_to_array('[113.34647186 252.55239206]')
-    p = 2
-    data = ('graphs/new/nodes_9/depth_3/682.gml', starting_angles)
+    starting_angles = numpy_str_to_array('[ 0.09846283  1.09542449  0.24413344  1.06232401  0.24891363 -0.12280648 -0.38315228  0.43700106  2.79412061  0.06646058  0.43866129 '
+                                         '-0.24170536 -0.15203364  0.01012551  0.83908022 -0.08194016]')
+    p = 9
+    data = ('graphs/new/nodes_9/depth_3/646.gml', starting_angles)
     reader = partial(nx.read_gml, destringizer=int)
     path, ar, angles, nfev = worker_greedy(data, reader, p)
     print('Done')
@@ -198,7 +199,7 @@ if __name__ == '__main__':
     # df = calculate_min_p(df)
 
     # run_merge()
-    # run_graph_sequential()
+    run_graph_sequential()
     # generate_graphs()
     # run_graphs_init()
-    run_graphs_parallel()
+    # run_graphs_parallel()

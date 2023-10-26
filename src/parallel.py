@@ -69,7 +69,10 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
     graph = reader(path)
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
     method = 'COBYLA' if starting_point is not None and any(starting_point == 0) else 'BFGS'
-    result = optimize_qaoa_angles(evaluator, starting_point=starting_point, method=method)
+    try:
+        result = optimize_qaoa_angles(evaluator, starting_point=starting_point, method=method, options={'maxiter': np.iinfo(np.int32).max})
+    except str:
+        raise f'Optimization failed at {path}'
     nfev = result.nfev
     return path, -result.fun / graph.graph['maxcut'], result.x, nfev
 

@@ -176,7 +176,7 @@ def plot_min_ar_vs_p_nodes():
             ps, p_series = get_column_statistic(f'graphs/new/nodes_{n}/depth_3/output/{method}', r'p_\d+$', min)
             line_style = '-' if method_ind < 2 else '--'
             lines.append(Line(ps, p_series, colors[n_ind], markers[method_ind], line_style))
-    x_lim = [0.75, 10.25]
+    x_lim = [0.75, 12.25]
     plot_general(lines, ('p', 'Min AR'), (1, 0.02), (*x_lim, None, 1.0025))
     plt.legend([f'{x} nodes' for x in nodes], loc='lower right', fontsize='small')
     plt.plot(x_lim, [1, 1], 'k--')
