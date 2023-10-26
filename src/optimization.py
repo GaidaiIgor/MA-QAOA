@@ -233,6 +233,7 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, n
             next_angles = np.random.uniform(-np.pi, np.pi, evaluator.num_angles)
 
         result = optimize.minimize(evaluator.func, next_angles, **kwargs)
+        result.x = np.arctan2(np.sin(result.x), np.cos(result.x))  # Normalize angle range
 
         if result_best is None or result.fun < result_best.fun:
             result_best = result

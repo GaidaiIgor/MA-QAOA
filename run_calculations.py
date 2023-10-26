@@ -10,7 +10,7 @@ from pandas import DataFrame
 from src.angle_strategies import interp_qaoa_angles
 from src.data_processing import collect_results_from, calculate_edge_diameter, calculate_min_p, merge_dfs, numpy_str_to_array
 from src.graph_utils import get_edge_diameter, get_max_edge_depth, find_non_isomorphic, is_isomorphic
-from src.parallel import optimize_expectation_parallel, worker_standard_qaoa, calculate_maxcut_parallel
+from src.parallel import optimize_expectation_parallel, worker_standard_qaoa, calculate_maxcut_parallel, worker_greedy
 
 
 def collect_results_xqaoa():
@@ -163,20 +163,11 @@ def run_graphs_parallel():
 
 
 def run_graph_sequential():
-    starting_angles = numpy_str_to_array('[-4.54992896e+00  1.38213194e+00 -4.78739633e+00  1.10957815e+00 -4.64460145e+00  1.71074627e+00 -4.56526138e+00  1.23540832e+00 '
-                                         '-4.66688927e+00  1.34059128e+00 -4.50977178e+00  1.31694875e+00 -4.60401055e+00  1.45413921e+00 -4.53122317e+00  1.34898498e+00 '
-                                         '-4.56927684e+00  1.49917922e+00 -4.52673798e+00  1.39349468e+00 -4.27775638e+00  1.46940176e+00 -4.68488557e+00  6.74018259e-01 '
-                                         '-4.73858992e+00  8.94675413e-01 -5.19731797e+00  2.32046002e+00 -4.72171445e+00  2.41553903e+00  1.80698688e-02 -4.19531736e-02  '
-                                         '1.05459646e-03 -1.64588311e-02  9.69408824e-04 -8.69544904e-04]')
-    p = 19
-    # starting_angles = interp_qaoa_angles(starting_angles, p - 1)
-    starting_angles = np.concatenate((starting_angles[:-6], [0] * 2, starting_angles[-6:]))
-    data = ('graphs/new/nodes_9/depth_3/675.gml', starting_angles)
+    starting_angles = numpy_str_to_array('[113.34647186 252.55239206]')
+    p = 2
+    data = ('graphs/new/nodes_9/depth_3/682.gml', starting_angles)
     reader = partial(nx.read_gml, destringizer=int)
-
-    search_space = 'qaoa'
-    guess_format = 'qaoa'
-    path, ar, angles, nfev = worker_standard_qaoa(data, reader, p, search_space, guess_format)
+    path, ar, angles, nfev = worker_greedy(data, reader, p)
     print('Done')
 
 

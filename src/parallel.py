@@ -68,7 +68,7 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
     path, starting_point = data
     graph = reader(path)
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
-    method = 'Nelder-Mead' if starting_point is not None and any(starting_point == 0) else 'BFGS'
+    method = 'COBYLA' if starting_point is not None and any(starting_point == 0) else 'BFGS'
     result = optimize_qaoa_angles(evaluator, starting_point=starting_point, method=method)
     nfev = result.nfev
     return path, -result.fun / graph.graph['maxcut'], result.x, nfev
