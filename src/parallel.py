@@ -56,13 +56,14 @@ def worker_general_qaoa_sub(path: str, reader: callable, p: int):
     return path, *optimize_qaoa_angles(evaluator, num_restarts=1)
 
 
-def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: str) -> tuple:
+def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: str, num_restarts: int = 1) -> tuple:
     """
     Worker function for non-generalized QAOA.
     :param data: Tuple of input data for the worker. Includes 1) Path to the input file; 2) Starting point for optimization (or None for random) in the format of search space.
     :param reader: Function that reads graph from the file.
     :param p: Number of QAOA layers.
     :param search_space: Name of angle search space (ma, qaoa, linear, tqa).
+    :param num_restarts: Number of random starting points to try.
     :return: 1) Path to processed file; 2) Approximation ratio; 3) Corresponding angles; 4) Number of function evaluations.
     """
     path, starting_point = data
@@ -70,7 +71,7 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
     method = 'COBYLA' if starting_point is not None and any(starting_point == 0) else 'BFGS'
     try:
-        result = optimize_qaoa_angles(evaluator, starting_point=starting_point, method=method, options={'maxiter': np.iinfo(np.int32).max})
+        result = optimize_qaoa_angles(evaluator, starting_point=starting_point, num_restarts=num_restarts, method=method, options={'maxiter': np.iinfo(np.int32).max})
     except str:
         raise f'Optimization failed at {path}'
     nfev = result.nfev
@@ -191,7 +192,7 @@ def worker_maxcut(path: str, reader: callable):
     nx.write_gml(graph, path)
 
 
-def select_worker_func(worker: str, reader: callable, p: int, search_space: str, guess_format: str):
+def select_worker_func(worker: str, reader: callable, p: int, search_space: str, guess_format: str, num_restarts: int):
     """
     Selects worker function based on arguments and binds all arguments except the input path.
     :param worker: Name of worker.
@@ -199,6 +200,7 @@ def select_worker_func(worker: str, reader: callable, p: int, search_space: str,
     :param p: Number of QAOA layers.
     :param search_space: Name of angle search space (xqaoa, ma, qaoa, linear, tqa).
     :param guess_format: Name of format of starting point (same options as for search space).
+    :param num_restarts: Number of restarts.
     :return: Bound worker function.
     """
     if worker == 'general':
@@ -206,7 +208,7 @@ def select_worker_func(worker: str, reader: callable, p: int, search_space: str,
     elif worker == 'general_sub':
         worker_func = partial(worker_general_qaoa_sub, reader=reader, p=p)
     elif worker == 'standard':
-        worker_func = partial(worker_standard_qaoa, reader=reader, p=p, search_space=search_space)
+        worker_func = partial(worker_standard_qaoa, reader=reader, p=p, search_space=search_space, num_restarts=num_restarts)
     elif worker == 'interp':
         worker_func = partial(worker_interp, reader=reader, p=p)
     elif worker == 'linear':
@@ -247,7 +249,7 @@ def prepare_worker_data(input_df: DataFrame, rows: ndarray, initial_guess: str, 
 
 
 def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_workers: int, worker: str, reader: callable, search_space: str, p: int, initial_guess: str,
-                                  guess_format: str, angles_col: str | None, copy_col: str | None, copy_p: int, copy_better: bool, out_col: str):
+                                  guess_format: str, num_restarts: int, angles_col: str | None, copy_col: str | None, copy_p: int, copy_better: bool, out_col: str):
     """
     Optimizes cut expectation for a given set of graphs in parallel and writes the output dataframe.
     :param dataframe_path: Path to input dataframe with information about jobs.
@@ -259,6 +261,7 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     :param p: Number of QAOA layers.
     :param initial_guess: Initial guess strategy (random, explicit or interp).
     :param guess_format: Name of format of starting point (same options as for search space).
+    :param num_restarts: Number of restarts.
     :param angles_col: Name of column in df with initial angles for optimization.
     :param copy_col: Name of the column from where expectation should be copied if it was not calculated in the current round (=None).
     :param copy_p: Value of p for the copy column. If current p is different, the copied angles will be appended with 0 to keep the angle format consistent.
@@ -276,7 +279,7 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
             return
         results = [(path, *[np.nan] * (len(cols) - 1)) for path in df.index]
     else:
-        worker_func = select_worker_func(worker, reader, p, search_space, guess_format)
+        worker_func = select_worker_func(worker, reader, p, search_space, guess_format, num_restarts)
         results = []
         with Pool(num_workers) as pool:
             for result in tqdm(pool.imap(worker_func, worker_data), total=len(worker_data), smoothing=0, ascii=' █'):
