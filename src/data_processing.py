@@ -2,6 +2,7 @@ import glob
 import re
 from math import copysign
 from pathlib import Path
+from typing import Sequence
 
 import networkx as nx
 import numpy as np
@@ -188,7 +189,7 @@ def copy_expectation_dataframe(df: DataFrame) -> DataFrame:
     return df
 
 
-def merge_dfs(base_path: str, ps: list[int], restarts: int, convergence_threshold: float, out_name: str, copy_better: bool):
+def merge_dfs(base_path: str, ps: Sequence[int], restarts: Sequence[int], convergence_threshold: float, out_name: str, copy_better: bool):
     """
     Merges dataframes corresponding to specified values of p with specified number of restarts and writes a new merged dataframe.
     :param base_path: Path to the folder with individual p calculations.
@@ -203,10 +204,11 @@ def merge_dfs(base_path: str, ps: list[int], restarts: int, convergence_threshol
     merged_df = pd.DataFrame()
     for p_ind, p in enumerate(ps):
         next_df = pd.read_csv(f'{base_path}/p_{p}/out.csv', index_col=0)
-        exp_col_name = f'r_{restarts}'
-        calculated_restarts = extract_numbers(next_df.filter(regex=r'r_\d+$').columns)
-        if restarts > calculated_restarts[-1] and sum(next_df[f'r_{calculated_restarts[-1]}'] > convergence_threshold) == next_df.shape[0]:
-            exp_col_name = f'r_{calculated_restarts[-1]}'
+        next_restarts = restarts[p_ind]
+        exp_col_name = f'r_{next_restarts}'
+        calculated_restarts = extract_numbers(next_df.filter(regex=r'r_\d+$').columns)[-1]
+        if next_restarts > calculated_restarts and sum(next_df[f'r_{calculated_restarts}'] > convergence_threshold) == next_df.shape[0]:
+            exp_col_name = f'r_{calculated_restarts}'
 
         angle_col_name = get_angle_col_name(exp_col_name)
         new_exp_col_name = f'p_{p}'
