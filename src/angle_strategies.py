@@ -50,6 +50,40 @@ def qaoa_decorator(ma_qaoa_func: callable, num_edges: int, num_nodes: int) -> ca
     return qaoa_wrapped
 
 
+def convert_angles_fourier_to_qaoa(frequencies: ndarray) -> ndarray:
+    """
+    Converts QAOA angles from the frequency domain to space domain by Fourier transform. Assumes p = q.
+    The method is taken from Zhou, Wang, Choi, Pichler, Lukin; Quantum Approximate Optimization Algorithm: Performance, Mechanism, and Implementation on Near-Term Devices.
+    https://doi.org/10.1103/PhysRevX.10.021067
+    :param frequencies: Frequency values. Size: 2*q. Format: u_1, v_1, ..., u_q, v_q
+    :return: QAOA angles.
+    """
+    q = len(frequencies) // 2
+    p = q
+    us = frequencies[::2]
+    vs = frequencies[1::2]
+    gammas = np.zeros((p, 1))
+    betas = np.zeros((p, 1))
+    frequency_multipliers = np.arange(q) + 0.5
+    for i in range(p):
+        gammas[i] = np.dot(us, np.sin(frequency_multipliers * (i + 0.5) * np.pi / p))
+        betas[i] = np.dot(vs, np.cos(frequency_multipliers * (i + 0.5) * np.pi / p))
+    qaoa_angles = np.array(list(it.chain(*zip(gammas, betas))))
+    return qaoa_angles
+
+
+def fourier_decorator(qaoa_func: callable) -> callable:
+    """
+    Decorates QAOA-style function with Fourier angle interface.
+    :param qaoa_func: Function that expects QAOA angles as first parameter.
+    :return: Adapted function that accepts angles in Fourier format as first parameter.
+    """
+    def fourier_wrapped(*args, **kwargs):
+        angles_qaoa = convert_angles_fourier_to_qaoa(args[0])
+        return qaoa_func(angles_qaoa, *args[1:], **kwargs)
+    return fourier_wrapped
+
+
 def convert_angles_linear_qaoa(params: ndarray, p: int) -> ndarray:
     """
     Returns QAOA angles defined by the linear ramp strategy. Linear ramp changes angles linearly from starting to final over p layers.
@@ -65,7 +99,7 @@ def convert_angles_linear_qaoa(params: ndarray, p: int) -> ndarray:
 
 def linear_decorator(qaoa_func: callable, p: int) -> callable:
     """
-    Translates linear ramp parameters to match QAOA format and calls the provided QAOA function.
+    Decorates QAOA-style function with linear angle interface.
     :param qaoa_func: Function that expects QAOA angles as first parameter.
     :param p: Number of QAOA layers.
     :return: Adapted function that accepts angles in linear ramp format.
@@ -117,19 +151,6 @@ def interp_p_series(angles: ndarray) -> ndarray:
     return new_angles
 
 
-# def interp_qaoa_angles(angles: ndarray) -> ndarray:
-#     """
-#     Interpolates QAOA angles at level p to generate a good initial guess for level p + 1.
-#     The method is taken from Zhou, Wang, Choi, Pichler, Lukin; Quantum Approximate Optimization Algorithm: Performance, Mechanism, and Implementation on Near-Term Devices.
-#     https://doi.org/10.1103/PhysRevX.10.021067
-#     :param angles: Optimized angles at level p.
-#     :return: Initial guess for level p + 1.
-#     """
-#     new_gammas = interp_p_series(angles[::2])
-#     new_betas = interp_p_series(angles[1::2])
-#     return np.array(list(it.chain(*zip(new_gammas, new_betas))))
-
-
 def interp_qaoa_angles(angles: ndarray, p: int) -> ndarray:
     """
     Interpolates (MA-)QAOA angles at level p to generate a good initial guess for level p + 1.
@@ -165,25 +186,25 @@ def fix_angles(eval_func: callable, num_angles: int, inds: list[int], values: li
     return new_func
 
 
-def qaoa_scheme_decorator(ma_qaoa_func: callable, duplication_scheme: list[ndarray]) -> callable:
-    """ Test decorator that uses custom duplication schemes. """
-    def qaoa_wrapped(*args, **kwargs):
-        angles_maqaoa = duplicate_angles(args[0], duplication_scheme)
-        return ma_qaoa_func(angles_maqaoa, *args[1:], **kwargs)
-    return qaoa_wrapped
-
-
-def generate_all_duplication_schemes_p1_22(num_edges: int, num_nodes: int) -> list[list[ndarray]]:
-    """ Test """
-    import itertools as it
-    edge_indices = set(range(num_edges))
-    edge_subsets = list(it.chain.from_iterable(it.combinations(edge_indices, combo_len) for combo_len in range(1, num_edges // 2 + 1)))
-    node_indices = set(range(num_nodes))
-    node_subsets = list(it.chain.from_iterable(it.combinations(node_indices, combo_len) for combo_len in range(1, num_nodes // 2 + 1)))
-    subset_combos = it.product(edge_subsets, node_subsets)
-    duplication_schemes = []
-    for edge_combo, node_combo in subset_combos:
-        next_scheme = [np.array(list(edge_combo)), np.array(list(edge_indices - set(edge_combo))), np.array(list(node_combo)) + num_edges,
-                       np.array(list(node_indices - set(node_combo))) + num_edges]
-        duplication_schemes.append(next_scheme)
-    return duplication_schemes
+# def qaoa_scheme_decorator(ma_qaoa_func: callable, duplication_scheme: list[ndarray]) -> callable:
+#     """ Test decorator that uses custom duplication schemes. """
+#     def qaoa_wrapped(*args, **kwargs):
+#         angles_maqaoa = duplicate_angles(args[0], duplication_scheme)
+#         return ma_qaoa_func(angles_maqaoa, *args[1:], **kwargs)
+#     return qaoa_wrapped
+#
+#
+# def generate_all_duplication_schemes_p1_22(num_edges: int, num_nodes: int) -> list[list[ndarray]]:
+#     """ Test """
+#     import itertools as it
+#     edge_indices = set(range(num_edges))
+#     edge_subsets = list(it.chain.from_iterable(it.combinations(edge_indices, combo_len) for combo_len in range(1, num_edges // 2 + 1)))
+#     node_indices = set(range(num_nodes))
+#     node_subsets = list(it.chain.from_iterable(it.combinations(node_indices, combo_len) for combo_len in range(1, num_nodes // 2 + 1)))
+#     subset_combos = it.product(edge_subsets, node_subsets)
+#     duplication_schemes = []
+#     for edge_combo, node_combo in subset_combos:
+#         next_scheme = [np.array(list(edge_combo)), np.array(list(edge_indices - set(edge_combo))), np.array(list(node_combo)) + num_edges,
+#                        np.array(list(node_indices - set(node_combo))) + num_edges]
+#         duplication_schemes.append(next_scheme)
+#     return duplication_schemes

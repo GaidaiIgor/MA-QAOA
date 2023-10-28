@@ -176,7 +176,7 @@ def plot_min_ar_vs_p_nodes():
             ps, p_series = get_column_statistic(f'graphs/new/nodes_{n}/depth_3/output/{method}', r'p_\d+$', min)
             line_style = '-' if method_ind < 2 else '--'
             lines.append(Line(ps, p_series, colors[n_ind], markers[method_ind], line_style))
-    x_lim = [0.75, 12.25]
+    x_lim = [0.75, 14.25]
     plot_general(lines, ('p', 'Min AR'), (1, 0.02), (*x_lim, None, 1.0025))
     plt.legend([f'{x} nodes' for x in nodes], loc='lower right', fontsize='small')
     plt.plot(x_lim, [1, 1], 'k--')
@@ -227,19 +227,24 @@ def plot_avg_ar_vs_p_experimental_test():
 
 
 def plot_min_ar_vs_p_experimental_test():
+    # methods = ['ma/explicit/out.csv', 'ma/random/qaoa/out.csv', 'ma/random/ma/out_r1.csv', 'gen1/out.csv', 'gen12e/out.csv', 'xqaoa/random/out.csv', 'xqaoa/explicit/out.csv']
+    # labels = ['Optimal QAOA -> MA', 'Random QAOA -> MA', 'Random MA', 'Generalized 1', 'Generalized 2(e)', 'Random XQAOA', 'Optimal QAOA -> XQAOA']
+
+    methods = ['qaoa/random/out_rp.csv', 'qaoa/greedy/out.csv', 'qaoa/interp/out.csv']
+    labels = ['Random', 'Greedy', 'Interp']
+
     nodes = range(9, 10)
-    methods = ['ma/explicit/out.csv', 'ma/random/qaoa/out.csv', 'ma/random/ma/out_r1.csv', 'gen1/out.csv', 'gen12e/out.csv', 'xqaoa/random/out.csv', 'xqaoa/explicit/out.csv']
     lines = []
     for method_ind, method in enumerate(methods):
         for n_ind, n in enumerate(nodes):
             ps, p_series = get_column_statistic(f'graphs/new/nodes_{n}/depth_3/output/{method}', r'p_\d+$', min)
             lines.append(Line(ps, p_series, colors[method_ind]))
-    x_lim = [0.75, 5.25]
-    plot_general(lines, ('p', 'Min AR'), (1, 0.01), (*x_lim, None, 1.0025))
-    labels = ['Optimal QAOA -> MA', 'Random QAOA -> MA', 'Random MA', 'Generalized 1', 'Generalized 2(e)', 'Random XQAOA', 'Optimal QAOA -> XQAOA']
+
+    x_lim = [0.75, 11.25]
+    plot_general(lines, ('p', 'Min AR'), (1, 0.02), (*x_lim, None, 1.005))
     plt.legend(labels, loc='lower right', fontsize='small')
     plt.plot(x_lim, [1, 1], 'k--')
-    plt.plot(x_lim, [0.99, 0.99], 'r--')
+    plt.plot(x_lim, [0.95, 0.95], 'r--')
     save_figure()
     plt.show()
 
@@ -483,10 +488,10 @@ if __name__ == "__main__":
 
     # plot_avg_ar_vs_p_interp_nodes()
     # plot_avg_ar_vs_p_interp_edges()
-    plot_min_ar_vs_p_nodes()
+    # plot_min_ar_vs_p_nodes()
     # plot_min_ar_vs_p_interp_edges()
     # plot_avg_ar_vs_p_experimental_test()
-    # plot_min_ar_vs_p_experimental_test()
+    plot_min_ar_vs_p_experimental_test()
     # plot_avg_ar_vs_cost_interp_nodes()
     # plot_avg_ar_vs_cost_interp_edges()
     # plot_interp_random_ar_difference_vs_p_nodes()

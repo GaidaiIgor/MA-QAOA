@@ -69,11 +69,11 @@ def worker_standard_qaoa(data: tuple, reader: callable, p: int, search_space: st
     path, starting_point = data
     graph = reader(path)
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
-    method = 'COBYLA' if starting_point is not None and any(starting_point == 0) else 'BFGS'
+    method = 'COBYLA'
     try:
         result = optimize_qaoa_angles(evaluator, starting_point=starting_point, num_restarts=num_restarts, method=method, options={'maxiter': np.iinfo(np.int32).max})
-    except str:
-        raise f'Optimization failed at {path}'
+    except Exception:
+        raise Exception(f'Optimization failed at {path}')
     nfev = result.nfev
     return path, -result.fun / graph.graph['maxcut'], result.x, nfev
 
@@ -88,6 +88,19 @@ def worker_interp(data: tuple, reader: callable, p: int) -> tuple:
     """
     path, prev_angles = data
     starting_angles = interp_qaoa_angles(prev_angles, p - 1)
+    return worker_standard_qaoa((path, starting_angles), reader, p, 'qaoa')
+
+
+def worker_fourier(data: tuple, reader: callable, p: int) -> tuple:
+    """
+    Worker that implements fourier strategy for QAOA (interpolates angles from p - 1 for a guess at p).
+    :param data: Tuple of 1) Path to the graph file; 2) Best unperturbed angles found at level p - 1; 3) Best overall angles found at level p - 1.
+    :param reader: Function that reads graph from the file.
+    :param p: Number of QAOA layers.
+    :return: 1) Path to processed file; 2) Approximation ratio; 3) Corresponding angles; 4) Number of function evaluations.
+    """
+    path, angles_unperturbed, angles_best = data
+    starting_angles = np.concatenate((angles_unperturbed, [0] * 2))
     return worker_standard_qaoa((path, starting_angles), reader, p, 'qaoa')
 
 

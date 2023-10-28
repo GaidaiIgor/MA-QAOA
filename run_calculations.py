@@ -10,7 +10,7 @@ from pandas import DataFrame
 from src.angle_strategies import interp_qaoa_angles
 from src.data_processing import collect_results_from, calculate_edge_diameter, calculate_min_p, merge_dfs, numpy_str_to_array
 from src.graph_utils import get_edge_diameter, get_max_edge_depth, find_non_isomorphic, is_isomorphic
-from src.parallel import optimize_expectation_parallel, worker_standard_qaoa, calculate_maxcut_parallel, worker_greedy
+from src.parallel import optimize_expectation_parallel, worker_standard_qaoa, calculate_maxcut_parallel, worker_greedy, worker_linear, worker_interp
 
 
 def collect_results_xqaoa():
@@ -125,70 +125,105 @@ def init_dataframe(worker: str, initial_guess: str, data_path: str, num_graphs: 
 
 
 def run_graphs_parallel():
-    num_graphs = 1000
-    num_workers = 20
-    worker = 'greedy'
+    worker = 'standard'
     search_space = 'qaoa'
-    initial_guess = 'explicit'
+    initial_guess = 'random'
     guess_format = 'qaoa'
     nodes = list(range(9, 10))
     depths = list(range(3, 7))
-    ps = list(range(2, 13))
-    reader = partial(nx.read_gml, destringizer=int)
+    ps = list(range(11, 12))
     copy_better = True
+    reader = partial(nx.read_gml, destringizer=int)
+    num_graphs = 1000
+    num_workers = 20
     convergence_threshold = 0.9995
 
     for p in ps:
         for node in nodes:
             node_depths = [3] if node < 12 else depths
             for depth in node_depths:
-                data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
-                out_path = get_out_path(data_path, search_space, worker, initial_guess, guess_format)
+                for r in range(1, p + 1):
+                    data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
+                    out_path = get_out_path(data_path, search_space, worker, initial_guess, guess_format, p)
 
-                starting_angles_col = get_starting_angles_col_name(worker, initial_guess, p)
-                out_col_name = f'p_{p}'
+                    starting_angles_col = get_starting_angles_col_name(worker, initial_guess, p)
+                    out_col_name = f'r_{r}'
+                    rows_func = lambda df: None if r == 1 else df[f'r_{r - 1}'] < convergence_threshold
+                    copy_col = None if r == 1 else f'r_{r - 1}'
+                    copy_p = p
 
-                rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
-                # rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)
-                rows_func = lambda df: (df[f'p_{p}'] < convergence_threshold) & ((df[f'p_{p}_nfev'] == 1000 * p) | (df[f'p_{p}'] < df[f'p_{p - 1}']))
+                    out_folder = path.split(out_path)[0]
+                    if not path.exists(out_folder):
+                        os.makedirs(path.split(out_path)[0])
+                    if not path.exists(out_path):
+                        init_dataframe(worker, initial_guess, data_path, num_graphs, out_path)
 
-                copy_col = None if p == 1 else f'p_{p - 1}'
-                copy_p = p - 1
+                    optimize_expectation_parallel(out_path, rows_func, num_workers, worker, reader, search_space, p, initial_guess, guess_format, 1, starting_angles_col,
+                                                  copy_col, copy_p, copy_better, out_col_name)
 
-                out_folder = path.split(out_path)[0]
-                if not path.exists(out_folder):
-                    os.makedirs(path.split(out_path)[0])
-                if not path.exists(out_path):
-                    init_dataframe(worker, initial_guess, data_path, num_graphs, out_path)
-
-                optimize_expectation_parallel(out_path, rows_func, num_workers, worker, reader, search_space, p, initial_guess, guess_format, starting_angles_col,
-                                              copy_col, copy_p, copy_better, out_col_name)
+    # for p in ps:
+    #     for node in nodes:
+    #         node_depths = [3] if node < 12 else depths
+    #         for depth in node_depths:
+    #             data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
+    #             out_path = get_out_path(data_path, search_space, worker, initial_guess, guess_format, p)
+    #             num_restarts = p
+    #
+    #             starting_angles_col = get_starting_angles_col_name(worker, initial_guess, p)
+    #             out_col_name = f'p_{p}'
+    #
+    #             rows_func = lambda df: None if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
+    #             # rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)
+    #             # rows_func = lambda df: (df[f'p_{p}'] < convergence_threshold) & ((df[f'p_{p}_nfev'] == 1000 * p) | (df[f'p_{p}'] < df[f'p_{p - 1}']))
+    #
+    #             copy_col = None if p == 1 else f'p_{p - 1}'
+    #             copy_p = p - 1
+    #
+    #             out_folder = path.split(out_path)[0]
+    #             if not path.exists(out_folder):
+    #                 os.makedirs(path.split(out_path)[0])
+    #             if not path.exists(out_path):
+    #                 init_dataframe(worker, initial_guess, data_path, num_graphs, out_path)
+    #
+    #             optimize_expectation_parallel(out_path, rows_func, num_workers, worker, reader, search_space, p, initial_guess, guess_format, num_restarts, starting_angles_col,
+    #                                           copy_col, copy_p, copy_better, out_col_name)
 
 
 def run_graph_sequential():
-    starting_angles = numpy_str_to_array('[ 0.09846283  1.09542449  0.24413344  1.06232401  0.24891363 -0.12280648 -0.38315228  0.43700106  2.79412061  0.06646058  0.43866129 '
-                                         '-0.24170536 -0.15203364  0.01012551  0.83908022 -0.08194016]')
-    p = 9
-    data = ('graphs/new/nodes_9/depth_3/646.gml', starting_angles)
+    starting_angles = numpy_str_to_array('[-0.09002267  0.9298308  -0.1602996   1.05479202 -0.16007795  1.11920969 -0.16440415  1.19878333 -0.17971417  1.26707239 -0.20519893  '
+                                         '1.33900933 -0.23493283 -0.16705668  1.30494715  0.7748831   1.57298629  0.71734837]')
+    p = 13
+    data = ('graphs/new/nodes_9/depth_3/92.gml', None)
     reader = partial(nx.read_gml, destringizer=int)
-    path, ar, angles, nfev = worker_greedy(data, reader, p)
+
+    for r in range(p):
+        _, ar, angles, nfev = worker_standard_qaoa(data, reader, p, 'qaoa')
+        # data = (data[0], angles)
+        print(f'p: {p}; ar: {ar}; angles: {angles}')
+
+    # path, ar, angles, nfev = worker_standard_qaoa(data, reader, p, 'qaoa')
+    # path, ar, angles, nfev = worker_interp(data, reader, p)
+    # path, ar, angles, nfev = worker_linear(data, reader, p, 'linear')
+    # print(f'p: {p}; ar: {ar}; angles: {angles}')
     print('Done')
 
 
 def run_merge():
     copy_better = True
-    nodes = [9, 10, 11, 12]
+    nodes = [9]
     depths = [3, 4, 5, 6]
-    methods = ['ma']
-    ps = {'qaoa': list(range(1, 11)), 'ma': list(range(1, 6))}
-    restarts = 10
+    methods = ['qaoa']
+    ps_all = {'qaoa': list(range(1, 12)), 'ma': list(range(1, 6))}
     convergence_threshold = 0.9995
     for method in methods:
+        ps = ps_all[method]
         for node in nodes:
             node_depths = [3] if node < 12 else depths
             for depth in node_depths:
                 base_path = f'graphs/new/nodes_{node}/depth_{depth}/output/{method}/random'
-                merge_dfs(base_path, ps[method], restarts, convergence_threshold, f'{base_path}/out_r{restarts}.csv', copy_better)
+                restarts = np.arange(ps[-1]) + 1
+                restarts[0] = 10
+                merge_dfs(base_path, ps, restarts, convergence_threshold, f'{base_path}/out_rp.csv', copy_better)
 
 
 if __name__ == '__main__':
@@ -201,8 +236,8 @@ if __name__ == '__main__':
     # df = calculate_edge_diameter(df)
     # df = calculate_min_p(df)
 
-    # run_merge()
-    # run_graph_sequential()
+    run_merge()
     # generate_graphs()
     # run_graphs_init()
-    run_graphs_parallel()
+    # run_graph_sequential()
+    # run_graphs_parallel()
