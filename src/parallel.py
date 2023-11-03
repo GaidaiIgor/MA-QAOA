@@ -8,6 +8,7 @@ import networkx as nx
 import numpy as np
 import numpy.random as random
 import pandas as pd
+from natsort import natsort_keygen
 from numpy import ndarray
 from pandas import DataFrame, Series
 from tqdm import tqdm
@@ -225,7 +226,7 @@ class WorkerIterativePerturb(WorkerStandard):
         for i in range(self.p):
             starting_angles = angles_unperturbed if i == 0 else angles_best
             if i >= perturbations_start:
-                perturbation = self.alpha * random.normal(scale=starting_angles)
+                perturbation = self.alpha * random.normal(scale=abs(starting_angles))
                 starting_angles += perturbation
             starting_angles = self.extend_angles(starting_angles)
             result = WorkerStandard.process_entry_core(self, path, starting_angles)
@@ -237,9 +238,8 @@ class WorkerIterativePerturb(WorkerStandard):
 
     def process_entry(self, entry: tuple[str, Series]) -> Series:
         path, series = entry
-        angle_suffixes = ['_angles_unperturbed', '_angles_best'] if self.p > 2 else ['_angles'] * 2
-        angles_unperturbed = numpy_str_to_array(series[self.initial_guess_from + angle_suffixes[0]])
-        angles_best = numpy_str_to_array(series[self.initial_guess_from + angle_suffixes[1]])
+        angles_unperturbed = numpy_str_to_array(series[self.initial_guess_from + '_angles_unperturbed'])
+        angles_best = numpy_str_to_array(series[self.initial_guess_from + '_angles_best'])
         ar_best, angles_best, total_nfev, new_angles_unperturbed = self.process_entry_core(path, angles_unperturbed, angles_best)
         series[self.out_col] = ar_best
         series[self.out_col + '_angles_best'] = angles_best
@@ -412,7 +412,8 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
             for result in tqdm(pool.imap(worker.process_entry, rows_to_process.iterrows()), total=rows_to_process.shape[0], smoothing=0, ascii=' █'):
                 results.append(result)
 
-    df = pd.concat((DataFrame(results), remaining_rows)).sort_index()
+    df = pd.concat((DataFrame(results), remaining_rows)).sort_index(key=natsort_keygen())
+    df.index.name = 'path'
     if hasattr(worker, 'postprocess_dataframe'):
         df = worker.postprocess_dataframe(df)
     df.to_csv(dataframe_path)
