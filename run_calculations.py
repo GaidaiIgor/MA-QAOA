@@ -7,9 +7,10 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
-from src.data_processing import collect_results_from, merge_dfs
+from src.angle_strategies import convert_angles_qaoa_to_fourier
+from src.data_processing import collect_results_from, merge_dfs, numpy_str_to_array
 from src.graph_utils import get_max_edge_depth, is_isomorphic
-from src.parallel import optimize_expectation_parallel, WorkerFourier, WorkerStandard
+from src.parallel import optimize_expectation_parallel, WorkerFourier, WorkerStandard, WorkerBaseQAOA, WorkerInterp, WorkerGreedy, WorkerMA
 
 
 def collect_results_xqaoa():
@@ -60,45 +61,55 @@ def generate_graphs():
         nx.write_gml(graphs[i], f'{out_path}/{i}.gml')
 
 
-def init_dataframe(data_path: str, init_type: str, out_path: str):
-    if init_type == 'paths_only':
+def init_dataframe(data_path: str, worker: WorkerBaseQAOA, out_path: str):
+    if worker.initial_guess_from is None:
         paths = [f'{data_path}/{i}.gml' for i in range(1000)]
         df = DataFrame(paths).set_axis(['path'], axis=1).set_index('path')
-    elif init_type == 'copy_best_p_1':
+    elif isinstance(worker, (WorkerInterp, WorkerFourier, WorkerGreedy)):
         df = pd.read_csv(f'{data_path}/output/qaoa/random/p_1/out.csv', index_col=0)
-        prev_nfev = df.filter(regex=r'r_\d_nfev').sum(axis=1)
+        prev_nfev = df.filter(regex=r'r_\d_nfev').sum(axis=1).astype(int)
         df = df.filter(regex='r_10').rename(columns=lambda name: f'p_1{name[4:]}')
         df['p_1_nfev'] += prev_nfev
-    elif init_type == 'copy_qaoa_angles':
+        if isinstance(worker, WorkerFourier):
+            df['p_1_angles'] = df['p_1_angles'].apply(numpy_str_to_array).apply(convert_angles_qaoa_to_fourier)
+        if isinstance(worker, (WorkerInterp, WorkerFourier)):
+            df = df.rename(columns={'p_1_angles': 'p_1_angles_unperturbed'})
+            df['p_1_angles_best'] = df['p_1_angles_unperturbed']
+    elif isinstance(worker, WorkerMA):
         df = pd.read_csv(f'{data_path}/output/qaoa/interp/out.csv', index_col=0)
         df = df.filter(regex=r'p_\d+_angles_best').rename(columns=lambda name: f'{name[:-7]}_starting_angles')
     else:
-        raise Exception('Unknown init type')
+        raise Exception('No init for this worker')
     df.to_csv(out_path)
 
 
 def run_graphs_parallel():
-    nodes = list(range(9, 13))
+    nodes = list(range(9, 10))
     depths = list(range(3, 7))
-    ps = list(range(1, 2))
+    ps = list(range(2, 3))
 
-    num_workers = 20
+    num_workers = 1
     convergence_threshold = 0.9995
     reader = partial(nx.read_gml, destringizer=int)
 
     for p in ps:
-        worker = WorkerStandard(reader=reader, p=p, out_col=f'r_1', initial_guess_from=None, transfer_from=None, transfer_p=None, search_space='qaoa')
-        # worker = WorkerFourier(reader=reader, p=p, out_col=f'p_{p}', initial_guess_from=f'p_{p - 1}', transfer_from=f'p_{p - 1}', transfer_p=p - 1, alpha=0.6)
+        # worker = WorkerStandard(reader=reader, p=p, out_col=f'r_1', initial_guess_from=None, transfer_from=None, transfer_p=None, search_space='qaoa')
+        worker = WorkerFourier(reader=reader, p=p, out_col=f'p_{p}', initial_guess_from=f'p_{p - 1}', transfer_from=f'p_{p - 1}', transfer_p=p - 1, alpha=0.6)
 
         for node in nodes:
             node_depths = [3] if node < 12 else depths
             for depth in node_depths:
                 data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
 
-                # out_path = data_path + 'output/qaoa/fourier/out.csv'
-                out_path = data_path + 'output/qaoa/random/p_1/out.csv'
+                # out_path = data_path + 'output/qaoa/random/p_1/out.csv'
+                out_path = data_path + 'output/qaoa/fourier/out.csv'
 
-                rows_func = lambda df: np.ones((df.shape[0], 1), dtype=bool) if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
+                # rows_func = lambda df: np.ones((df.shape[0], 1), dtype=bool) if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
+
+                select_rows = np.zeros((1000, 1), dtype=bool)
+                select_rows[:10] = True
+                rows_func = lambda df: select_rows
+
                 # rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)
                 # rows_func = lambda df: (df[f'p_{p}'] < convergence_threshold) & ((df[f'p_{p}_nfev'] == 1000 * p) | (df[f'p_{p}'] < df[f'p_{p - 1}']))
 
@@ -106,7 +117,7 @@ def run_graphs_parallel():
                 if not path.exists(out_folder):
                     os.makedirs(path.split(out_path)[0])
                 if not path.exists(out_path):
-                    init_dataframe(data_path, 'copy_best_p_1', out_path)
+                    init_dataframe(data_path, worker, out_path)
 
                 optimize_expectation_parallel(out_path, rows_func, num_workers, worker)
 
