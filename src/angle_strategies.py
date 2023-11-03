@@ -5,6 +5,8 @@ import numpy as np
 from numpy import ndarray
 import itertools as it
 
+from src.data_processing import DiscreteSineTransform, DiscreteCosineTransform
+
 
 def duplicate_angles(input_angles: ndarray, duplication_scheme: list[ndarray]) -> ndarray:
     """
@@ -50,26 +52,34 @@ def qaoa_decorator(ma_qaoa_func: callable, num_edges: int, num_nodes: int) -> ca
     return qaoa_wrapped
 
 
-def convert_angles_fourier_to_qaoa(frequencies: ndarray) -> ndarray:
+def convert_angles_fourier_to_qaoa(fourier_angles: ndarray) -> ndarray:
     """
-    Converts QAOA angles from the frequency domain to space domain by Fourier transform. Assumes p = q.
+    Converts QAOA angles from the fourier to qaoa search space.
     The method is taken from Zhou, Wang, Choi, Pichler, Lukin; Quantum Approximate Optimization Algorithm: Performance, Mechanism, and Implementation on Near-Term Devices.
     https://doi.org/10.1103/PhysRevX.10.021067
-    :param frequencies: Frequency values. Size: 2*q. Format: u_1, v_1, ..., u_q, v_q
+    :param fourier_angles: Fourier angles. Size: 2*p. Format: u_1, v_1, ..., u_p, v_p
     :return: QAOA angles.
     """
-    q = len(frequencies) // 2
-    p = q
-    us = frequencies[::2]
-    vs = frequencies[1::2]
-    gammas = np.zeros((p, 1))
-    betas = np.zeros((p, 1))
-    frequency_multipliers = np.arange(q) + 0.5
-    for i in range(p):
-        gammas[i] = np.dot(us, np.sin(frequency_multipliers * (i + 0.5) * np.pi / p))
-        betas[i] = np.dot(vs, np.cos(frequency_multipliers * (i + 0.5) * np.pi / p))
+    us = fourier_angles[::2]
+    vs = fourier_angles[1::2]
+    gammas = DiscreteSineTransform.transform(us)
+    betas = DiscreteCosineTransform.transform(vs)
     qaoa_angles = np.array(list(it.chain(*zip(gammas, betas))))
     return qaoa_angles
+
+
+def convert_angles_qaoa_to_fourier(qaoa_angles: ndarray) -> ndarray:
+    """
+    Converts QAOA angles from qaoa to fourier search space.
+    :param qaoa_angles: Angles in qaoa search space.
+    :return: Angles in fourier search space.
+    """
+    gammas = qaoa_angles[::2]
+    betas = qaoa_angles[1::2]
+    us = DiscreteSineTransform.inverse(gammas)
+    vs = DiscreteCosineTransform.inverse(betas)
+    fourier_angles = np.array(list(it.chain(*zip(us, vs))))
+    return fourier_angles
 
 
 def fourier_decorator(qaoa_func: callable) -> callable:

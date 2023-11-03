@@ -143,49 +143,53 @@ def get_angle_col_name(col_name: str) -> str:
     return f'{col_name}_angles'
 
 
-def copy_expectation_column(df: DataFrame, copy_better: bool, copy_col: str, out_col: str, copy_p: int, out_p: int) -> DataFrame:
+def transfer_expectation_columns(df: DataFrame, transfer_from: str, transfer_to: str, angle_suffixes: Sequence[str], p_from: int, p_to: int, transfer_better: bool = True) -> \
+        DataFrame:
     """
-    Copies expectations and angles from the specified column if they are not present (or smaller) in the given column.
+    Transfers expectations and angles between the columns if they are not present (or smaller) in copy_to.
     :param df: Dataframe with QAOA expectation results.
-    :param copy_better: True if larger expectations are to be copied. False to copy only when a value is missing from the out_col (None).
-    :param copy_col: Column from where expectations should be copied.
-    :param out_col: Column to where expectations should be copied.
-    :param copy_p: The value of p for the copy_col.
-    :param out_p: The value of p for the out_col.
+    :param transfer_from: Column from where expectations should be copied.
+    :param transfer_to: Column to where expectations should be copied.
+    :param angle_suffixes: Suffixes that define the names of the columns that store the angles associated with the primary expectation columns.
+    :param p_from: The value of p for the transfer_from column.
+    :param p_to: The value of p for the transfer_to column.
+    :param transfer_better: True if larger expectations are to be copied. False to copy only when a value is missing from the copy_to (nan).
     :return: Modified dataframe with copied expectations.
     """
-    if copy_col is not None:
-        copy_angles_col = get_angle_col_name(copy_col)
-        out_angles_col = get_angle_col_name(out_col)
+    transfer_rows = np.isnan(df[transfer_to])
+    if transfer_better:
+        transfer_rows = transfer_rows | (df[transfer_to] < df[transfer_from])
 
-        copy_rows = np.isnan(df[out_col])
-        if copy_better:
-            copy_rows = copy_rows | (df[out_col] < df[copy_col])
+    if not any(transfer_rows):
+        return df
 
-        if not any(copy_rows):
-            return df
+    for suffix in angle_suffixes:
+        transfer_angles_from = transfer_from + suffix
+        transfer_angles_to = transfer_to + suffix
+        if p_to - p_from == 0:
+            df.loc[transfer_rows, transfer_angles_to] = df.loc[transfer_rows, transfer_angles_from]
+        else:
+            original_angles = df.loc[transfer_rows, transfer_angles_from].apply(lambda x: numpy_str_to_array(x))
+            angles_per_layer = len(original_angles[0]) // p_from
+            transformed_angles = [str(np.concatenate((angles, [0] * angles_per_layer * (p_to - p_from)))) for angles in original_angles]
+            df.loc[transfer_rows, transfer_angles_to] = transformed_angles
 
-        copy_angles = df.loc[copy_rows, copy_angles_col].apply(lambda x: numpy_str_to_array(x))
-        if copy_p != out_p:
-            angles_per_layer = len(copy_angles[0]) // copy_p
-            copy_angles = [str(np.concatenate((angles, [0] * angles_per_layer))) for angles in copy_angles]
-        df.loc[copy_rows, out_angles_col] = copy_angles
-        df.loc[copy_rows, out_col] = df.loc[copy_rows, copy_col]
+    df.loc[transfer_rows, transfer_to] = df.loc[transfer_rows, transfer_from]
     return df
 
 
-def copy_expectation_dataframe(df: DataFrame) -> DataFrame:
+def transfer_expectation_dataframe(df: DataFrame) -> DataFrame:
     """
-    Applies copy_expectation_column for all pairs of adjacent values of p.
+    Transfers expectations between all pairs of adjacent values of p assuming the standard angle suffixes.
     :param df: Dataframe with QAOA calculations.
     :return: Modified dataframe.
     """
-    copy_better = True
+    transfer_better = True
     exp_col_names = [col for col in df.columns if re.match(r'p_\d+$', col)]
     p_vals = extract_numbers(exp_col_names)
     max_p = max(p_vals)
     for p in range(2, max_p + 1):
-        df = copy_expectation_column(df, copy_better, f'p_{p - 1}', f'p_{p}', p - 1, p)
+        df = transfer_expectation_columns(df, f'p_{p - 1}', f'p_{p}', ['_angles'], p - 1, p, transfer_better)
     return df
 
 
@@ -219,7 +223,7 @@ def merge_dfs(base_path: str, ps: Sequence[int], restarts: Sequence[int], conver
         else:
             merged_df = merged_df.join(next_df)
     if copy_better:
-        merged_df = copy_expectation_dataframe(merged_df)
+        merged_df = transfer_expectation_dataframe(merged_df)
     merged_df.to_csv(out_name)
 
 
@@ -244,3 +248,41 @@ def round_angles(angles: ndarray) -> ndarray:
     :return: Rounded.
     """
     return np.round(angles * 4) / 4
+
+
+class DiscreteTransform:
+    """
+    Base class implementing discrete sine and cosine transformations.
+    :var func: sin or cos.
+    """
+    func: callable = None
+
+    @classmethod
+    def transform(cls, xs: ndarray) -> ndarray:
+        """
+        Calculates discrete sine or cosine transform of type 4 with the given sequence.
+        :param xs: Sequence for transform.
+        :return: Transformed sequence.
+        """
+        ys = np.zeros_like(xs, dtype=float)
+        mult_factors = np.arange(len(xs)) + 0.5
+        for i in range(len(ys)):
+            ys[i] = np.dot(xs, cls.func(mult_factors * (i + 0.5) * np.pi / len(xs)))
+        return ys
+
+    @classmethod
+    def inverse(cls, ys: ndarray) -> ndarray:
+        """
+        Inverses discrete transform.
+        :param ys: Sequence transformed by the transform method.
+        :return: Original input to the transform method.
+        """
+        return cls.transform(ys) * 2 / len(ys)
+
+
+class DiscreteSineTransform(DiscreteTransform):
+    func: callable = np.sin
+
+
+class DiscreteCosineTransform(DiscreteTransform):
+    func: callable = np.cos

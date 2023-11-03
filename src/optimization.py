@@ -9,22 +9,21 @@ from dataclasses import dataclass
 from typing import Callable
 
 import numpy as np
+import numpy.random as random
 import scipy.optimize as optimize
 from networkx import Graph
 from numpy import ndarray
 from scipy.optimize import OptimizeResult
-
-# from qiskit_aer.primitives import Estimator as AerEstimator
-
-# from qiskit.primitives import Estimator
 
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1
 from src.angle_strategies import qaoa_decorator, linear_decorator, tqa_decorator, fix_angles, fourier_decorator
 from src.graph_utils import get_index_edge_list
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
 from src.simulation.plain import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
-# from src.simulation.qiskit_backend import get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast, get_ma_ansatz_alt
 
+# from qiskit_aer.primitives import Estimator as AerEstimator
+# from qiskit.primitives import Estimator
+# from src.simulation.qiskit_backend import get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast, get_ma_ansatz_alt
 # from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit, get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast
 
 
@@ -49,7 +48,7 @@ class Evaluator:
         :param search_space: Name of the strategy to choose the number of variable parameters.
         :return: Simulation evaluator. The order of input parameters is according to the angle strategy.
         """
-        if search_space == 'ma' or search_space == 'xqaoa':
+        if search_space == 'general' or search_space == 'ma' or search_space == 'xqaoa':
             num_angles = (num_driver_terms + num_qubits) * p
         elif search_space == 'qaoa' or search_space == 'fourier':
             num_angles = 2 * p
@@ -232,7 +231,7 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, n
         if starting_point is not None:
             next_angles = starting_point
         else:
-            next_angles = np.random.uniform(-np.pi, np.pi, evaluator.num_angles)
+            next_angles = random.uniform(-np.pi, np.pi, evaluator.num_angles)
 
         result = optimize.minimize(evaluator.func, next_angles, **kwargs)
         if not result.success:
