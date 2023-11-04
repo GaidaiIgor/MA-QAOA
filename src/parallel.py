@@ -57,6 +57,15 @@ class WorkerBaseQAOA(WorkerAbstract, ABC):
     transfer_from: str | None = None
     transfer_p: int | None = None
 
+    def cast_nfev_to_int(self, dataframe: DataFrame) -> DataFrame:
+        """
+        Converts nan values of nfev to 0 and converts the data type to int.
+        :param dataframe: Dataframe to process.
+        :return: Converted dataframe.
+        """
+        dataframe[self.out_col + '_nfev'] = dataframe[self.out_col + '_nfev'].apply(lambda x: 0 if np.isnan(x) else x).apply(int)
+        return dataframe
+
     def postprocess_dataframe(self, dataframe: DataFrame) -> DataFrame:
         """
         Transfers missing or better expectations from the previous p. Updates angles to match the format of current p.
@@ -65,6 +74,7 @@ class WorkerBaseQAOA(WorkerAbstract, ABC):
         """
         if self.transfer_from is not None:
             dataframe = transfer_expectation_columns(dataframe, self.transfer_from, self.out_col, ['_angles'], self.transfer_p, self.p, True)
+        dataframe = self.cast_nfev_to_int(dataframe)
         return dataframe
 
 
@@ -160,7 +170,7 @@ class WorkerStandard(WorkerBaseQAOA):
             result = optimize_qaoa_angles(evaluator, **optimize_args, method=method, options=options)
         except Exception:
             raise Exception(f'Optimization failed at {path}')
-        return -result.fun / graph.graph['maxcut'], str(result.x), result.nfev
+        return -result.fun / graph.graph['maxcut'], result.x, result.nfev
 
     def process_entry(self, entry: tuple[str, Series]) -> Series:
         path, series = entry
@@ -261,6 +271,7 @@ class WorkerIterativePerturb(WorkerStandard):
         if self.transfer_from is not None:
             angle_suffixes = ['_angles_unperturbed', '_angles_best']
             dataframe = transfer_expectation_columns(dataframe, self.transfer_from, self.out_col, angle_suffixes, self.transfer_p, self.p, True)
+        self.cast_nfev_to_int(dataframe)
         return dataframe
 
 

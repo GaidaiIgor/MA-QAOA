@@ -1,7 +1,6 @@
 """
 Example uses.
 """
-import itertools as it
 import logging
 import time
 
@@ -10,11 +9,14 @@ import networkx as nx
 import numpy as np
 import tqdm
 
-from src.graph_utils import get_index_edge_list, read_graph_xqaoa
+from src.angle_strategies import convert_angles_tqa_to_qaoa
+from src.data_processing import numpy_str_to_array
+from src.graph_utils import get_index_edge_list
 from src.optimization import optimize_qaoa_angles, Evaluator
-from src.angle_strategies import generate_all_duplication_schemes_p1_22, convert_angles_qaoa_to_ma, convert_angles_tqa_to_qaoa
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
-from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit, optimize_angles_ma_qiskit
+
+
+# from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit, optimize_angles_ma_qiskit
 
 
 def add_graph():
@@ -71,63 +73,12 @@ def run_draw():
     plt.show()
 
 
-def run_angle_grouping():
-    graph = nx.read_gml('graphs/all_8/1000.gml', destringizer=int)  # MC=8, MA1=7.577, Q2=7.342
-    # graph = read_graph_xqaoa('graphs/xqaoa/G4#128_24.csv')  # maxcut = 224, xqaoa = 222, full = 216 (516?), reduced = 210 (366)
-    p = 1
-
-    target_vals = evaluate_graph_cut(graph)
-    edges = [edge for edge in get_index_edge_list(graph)]
-    driver_term_vals = np.array([evaluate_z_term(edge, len(graph)) for edge in edges])
-
-    # duplication_scheme = [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [11]]
-    # edge_groups = [[0, 1, 2, 5], [3, 4]]
-    # node_groups = [[0, 4], [1, 2, 3, 5]]
-    # shift = len(edges)
-    # node_groups = [np.array(item) + shift for item in node_groups]
-    # duplication_scheme = [*edge_groups, *node_groups]
-    # duplication_scheme = [np.array(item) for item in duplication_scheme]
-    # evaluator = Evaluator.get_evaluator_general_scheme(target_vals, driver_term_vals, p, duplication_scheme)
-
-    dup_schemes = generate_all_duplication_schemes_p1_22(len(graph.edges), len(graph))
-    optimized = []
-    for scheme in tqdm.tqdm(dup_schemes, smoothing=0):
-        evaluator = Evaluator.get_evaluator_general_scheme(target_vals, driver_term_vals, p, scheme)
-        objective_best, _ = optimize_qaoa_angles(evaluator, num_restarts=10)
-        optimized.append(objective_best)
-    print(max(optimized))
-
-
-def run_gradient():
-    graph = nx.read_gml('graphs/all_8/3054.gml', destringizer=int)
-    angles = np.array([0.250, 0.250, -0.250, -0.418, -0.250, 1.121, 0.250, 0.750]) * np.pi
-
-    grad = np.zeros_like(angles)
-    for i in range(len(grad)):
-        for edge in graph.edges(i):
-            grad[i] += np.sin(2 * angles[edge[1]])
-        grad[i] *= np.cos(2 * angles[i])
-
-    hessian = np.zeros((len(angles), len(angles)))
-    for i in range(len(angles)):
-        for j in range(len(angles)):
-            if i == j:
-                for edge in graph.edges(i):
-                    hessian[i, i] += np.sin(2 * angles[edge[1]])
-                hessian[i, i] *= -2 * np.sin(2 * angles[i])
-            else:
-                if not graph.has_edge(i, j):
-                    continue
-                hessian[i, j] = 2 * np.cos(2 * angles[i]) * np.cos(2 * angles[j])
-    print('Done')
-
-
 def run_optimization():
-    graph = nx.read_gml('graphs/nodes_8/ed_4/20.gml', destringizer=int)
+    graph = nx.read_gml('graphs/new/nodes_9/depth_3/0.gml', destringizer=int)
     # graph = nx.complete_graph(3)
-    graph = read_graph_xqaoa('graphs/xqaoa/G6#128_1.csv')
-    p = 1
-    search_space = 'ma'
+    # graph = read_graph_xqaoa('graphs/xqaoa/G6#128_1.csv')
+    p = 2
+    search_space = 'qaoa'
 
     # target_vals = evaluate_graph_cut(graph)
     # edges = [edge for edge in get_index_edge_list(graph)]
@@ -142,12 +93,12 @@ def run_optimization():
     # # driver_terms = [set(term) for term in it.chain(it.combinations(range(len(graph)), 1), it.combinations(range(len(graph)), 2))]
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
-    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
+    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
     # evaluator = Evaluator.get_evaluator_qiskit_fast(graph, p, search_space)
-    evaluator = Evaluator.get_evaluator_standard_maxcut_analytical(graph, use_multi_angle=True)
+    # evaluator = Evaluator.get_evaluator_standard_maxcut_analytical(graph, use_multi_angle=True)
 
-    starting_point = np.array([-0.867, 0.623])
-    starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
+    starting_point = numpy_str_to_array('[-0.17993277 -1.30073361 -1.08469108 -1.59744761]')
+    # starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
 
     result = optimize_qaoa_angles(evaluator, starting_angles=starting_point)
 

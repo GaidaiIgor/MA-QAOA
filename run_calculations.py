@@ -86,7 +86,7 @@ def run_graphs_parallel():
     depths = list(range(3, 7))
     ps = list(range(2, 3))
 
-    num_workers = 1
+    num_workers = 20
     convergence_threshold = 0.9995
     reader = partial(nx.read_gml, destringizer=int)
 
