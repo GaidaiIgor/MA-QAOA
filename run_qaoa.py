@@ -12,7 +12,7 @@ import tqdm
 
 from src.graph_utils import get_index_edge_list, read_graph_xqaoa
 from src.optimization import optimize_qaoa_angles, Evaluator
-from src.angle_strategies import generate_all_duplication_schemes_p1_22, convert_angles_qaoa_to_ma, convert_angles_tqa_qaoa
+from src.angle_strategies import generate_all_duplication_schemes_p1_22, convert_angles_qaoa_to_ma, convert_angles_tqa_to_qaoa
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
 from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit, optimize_angles_ma_qiskit
 
@@ -149,7 +149,7 @@ def run_optimization():
     starting_point = np.array([-0.867, 0.623])
     starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
 
-    result = optimize_qaoa_angles(evaluator, starting_point=starting_point)
+    result = optimize_qaoa_angles(evaluator, starting_angles=starting_point)
 
     # objective_best = optimize_angles_ma_qiskit(graph, p)
 
@@ -165,12 +165,12 @@ def run_optimization_combo():
     p = 1
 
     evaluator_1 = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='tqa')
-    objective_1, angles_1 = optimize_qaoa_angles(evaluator_1, starting_point=np.array([0.5]))
+    objective_1, angles_1 = optimize_qaoa_angles(evaluator_1, starting_angles=np.array([0.5]))
     print(f'obj: {objective_1}; angles: {angles_1}')
 
     evaluator_2 = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='regular')
-    starting_point = convert_angles_tqa_qaoa(angles_1, p)
-    objective_2, angles_2 = optimize_qaoa_angles(evaluator_2, starting_point=starting_point)
+    starting_point = convert_angles_tqa_to_qaoa(angles_1, p)
+    objective_2, angles_2 = optimize_qaoa_angles(evaluator_2, starting_angles=starting_point)
 
     print(f'TQA: {objective_1}; {angles_1}')
     print(f'QAOA: {objective_2}; {angles_2}')

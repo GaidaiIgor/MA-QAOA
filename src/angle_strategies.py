@@ -94,7 +94,7 @@ def fourier_decorator(qaoa_func: callable) -> callable:
     return fourier_wrapped
 
 
-def convert_angles_linear_qaoa(params: ndarray, p: int) -> ndarray:
+def convert_angles_linear_to_qaoa(params: ndarray, p: int) -> ndarray:
     """
     Returns QAOA angles defined by the linear ramp strategy. Linear ramp changes angles linearly from starting to final over p layers.
     :param params: 1D array of 4 numbers: starting and ending gamma, then starting and ending beta.
@@ -115,12 +115,12 @@ def linear_decorator(qaoa_func: callable, p: int) -> callable:
     :return: Adapted function that accepts angles in linear ramp format.
     """
     def linear_wrapped(*args, **kwargs):
-        qaoa_angles = convert_angles_linear_qaoa(args[0], p)
+        qaoa_angles = convert_angles_linear_to_qaoa(args[0], p)
         return qaoa_func(qaoa_angles, *args[1:], **kwargs)
     return linear_wrapped
 
 
-def convert_angles_tqa_qaoa(params: ndarray, p: int) -> ndarray:
+def convert_angles_tqa_to_qaoa(params: ndarray, p: int) -> ndarray:
     """
     Returns QAOA angles defined by the TQA strategy. TQA changes angles linearly from 0 to given final gamma over p layers. Beta is changed from final gamma to 0.
     :param params: 1D array with 1 number: final gamma for the angle progression.
@@ -141,7 +141,7 @@ def tqa_decorator(qaoa_func: callable, p: int) -> callable:
     :return: Adapted function that accepts angles in TQA format.
     """
     def tqa_wrapped(*args, **kwargs):
-        qaoa_angles = convert_angles_tqa_qaoa(args[0], p)
+        qaoa_angles = convert_angles_tqa_to_qaoa(args[0], p)
         return qaoa_func(qaoa_angles, *args[1:], **kwargs)
     return tqa_wrapped
 

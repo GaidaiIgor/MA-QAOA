@@ -13,8 +13,9 @@ from numpy import ndarray
 from pandas import DataFrame, Series
 from tqdm import tqdm
 
-from src.angle_strategies import convert_angles_qaoa_to_ma, convert_angles_linear_qaoa, convert_angles_tqa_qaoa, interp_qaoa_angles
-from src.data_processing import numpy_str_to_array, transfer_expectation_columns
+from src.angle_strategies import convert_angles_qaoa_to_ma, convert_angles_linear_to_qaoa, convert_angles_tqa_to_qaoa, interp_qaoa_angles, convert_angles_qaoa_to_fourier, \
+    convert_angles_fourier_to_qaoa
+from src.data_processing import numpy_str_to_array, transfer_expectation_columns, normalize_qaoa_angles
 from src.graph_utils import get_index_edge_list
 from src.optimization import Evaluator, optimize_qaoa_angles
 from src.preprocessing import evaluate_graph_cut, evaluate_z_term
@@ -102,7 +103,7 @@ class WorkerGeneral(WorkerBaseQAOA):
             driver_term_vals = np.append(driver_term_vals, driver_term_vals_2, axis=0)
 
         evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, self.p)
-        result = optimize_qaoa_angles(evaluator, starting_point=starting_point)
+        result = optimize_qaoa_angles(evaluator, starting_angles=starting_point)
 
         series[self.out_col] = -result.fun / graph.graph['maxcut']
         series[self.out_col + '_angles'] = result.x
@@ -128,7 +129,7 @@ class WorkerGeneralSub(WorkerGeneral):
             driver_terms += [set(term) for term in get_index_edge_list(graph)]
 
         evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, self.p)
-        result = optimize_qaoa_angles(evaluator, starting_point=starting_point)
+        result = optimize_qaoa_angles(evaluator, starting_angles=starting_point)
 
         series[self.out_col] = -result.fun / graph.graph['maxcut']
         series[self.out_col + '_angles'] = result.x
@@ -139,12 +140,12 @@ class WorkerGeneralSub(WorkerGeneral):
 class WorkerStandard(WorkerBaseQAOA):
     """ Implements standard processing with plain or random starting angles. """
 
-    def process_entry_core(self, path: str, starting_angles: ndarray | None, search_space: str = None) -> tuple:
+    def process_entry_core(self, path: str, search_space: str = None, **optimize_args) -> tuple:
         """
         Processes entry with plain input and output arguments.
         :param path: Path to graph file.
-        :param starting_angles: Starting angles for optimization or None for random.
         :param search_space: Custom search space or None to use self.search_space.
+        :param optimize_args: Additional arguments for optimization function.
         :return: 1) Approximation ratio; 2) Corresponding angles; 3) Number of function evaluations.
         """
         if search_space is None:
@@ -156,7 +157,7 @@ class WorkerStandard(WorkerBaseQAOA):
         options = {'maxiter': np.iinfo(np.int32).max}
 
         try:
-            result = optimize_qaoa_angles(evaluator, starting_point=starting_angles, method=method, options=options)
+            result = optimize_qaoa_angles(evaluator, **optimize_args, method=method, options=options)
         except Exception:
             raise Exception(f'Optimization failed at {path}')
         return -result.fun / graph.graph['maxcut'], str(result.x), result.nfev
@@ -179,14 +180,14 @@ class WorkerLinear(WorkerStandard):
 
     def process_entry(self, entry: tuple[str, Series]) -> Series:
         path, series = entry
-        _, linear_angles, total_nfev = WorkerStandard.process_entry_core(self, path, None)
+        _, linear_angles, total_nfev = WorkerStandard.process_entry_core(self, path, starting_angles=None)
 
         if self.search_space == 'tqa':
-            qaoa_angles = convert_angles_tqa_qaoa(linear_angles, self.p)
+            qaoa_angles = convert_angles_tqa_to_qaoa(linear_angles, self.p)
         elif self.search_space == 'linear':
-            qaoa_angles = convert_angles_linear_qaoa(linear_angles, self.p)
+            qaoa_angles = convert_angles_linear_to_qaoa(linear_angles, self.p)
 
-        ar, angles, nfev = WorkerStandard.process_entry_core(self, path, qaoa_angles, 'qaoa')
+        ar, angles, nfev = WorkerStandard.process_entry_core(self, path, 'qaoa', starting_angles=qaoa_angles)
         total_nfev += nfev
 
         series[self.out_col] = ar
@@ -221,6 +222,7 @@ class WorkerIterativePerturb(WorkerStandard):
         :param angles_best: Best overall angles from the previous layer.
         :return: 1) Best AR; 2) Best angles; 3) Total number of function evaluations; 4) Optimized unperturbed angles for this layer.
         """
+        normalize_angles = self.search_space != 'fourier'
         perturbations_start = 1 if all(angles_unperturbed == angles_best) else 2
         optimization_results = []
         for i in range(self.p):
@@ -229,7 +231,7 @@ class WorkerIterativePerturb(WorkerStandard):
                 perturbation = self.alpha * random.normal(scale=abs(starting_angles))
                 starting_angles += perturbation
             starting_angles = self.extend_angles(starting_angles)
-            result = WorkerStandard.process_entry_core(self, path, starting_angles)
+            result = WorkerStandard.process_entry_core(self, path, starting_angles=starting_angles, normalize_angles=normalize_angles)
             optimization_results.append(result)
 
         df = DataFrame(optimization_results)
@@ -240,7 +242,15 @@ class WorkerIterativePerturb(WorkerStandard):
         path, series = entry
         angles_unperturbed = numpy_str_to_array(series[self.initial_guess_from + '_angles_unperturbed'])
         angles_best = numpy_str_to_array(series[self.initial_guess_from + '_angles_best'])
+
+        if self.search_space == 'fourier':
+            angles_unperturbed = convert_angles_qaoa_to_fourier(angles_unperturbed)
+            angles_best = convert_angles_qaoa_to_fourier(angles_best)
         ar_best, angles_best, total_nfev, new_angles_unperturbed = self.process_entry_core(path, angles_unperturbed, angles_best)
+        if self.search_space == 'fourier':
+            new_angles_unperturbed = normalize_qaoa_angles(convert_angles_fourier_to_qaoa(new_angles_unperturbed))
+            angles_best = normalize_qaoa_angles(convert_angles_fourier_to_qaoa(angles_best))
+
         series[self.out_col] = ar_best
         series[self.out_col + '_angles_best'] = angles_best
         series[self.out_col + '_nfev'] = total_nfev
@@ -302,7 +312,7 @@ class WorkerGreedy(WorkerStandard):
         total_nfev = 0
         for insert_layer in range(self.p):
             next_transition_state = np.concatenate((starting_angles[:2 * insert_layer], [0] * 2, starting_angles[2 * insert_layer:]))
-            next_ar, next_angles, nfev = WorkerStandard.process_entry_core(self, path, next_transition_state)
+            next_ar, next_angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=next_transition_state)
             total_nfev += nfev
             if best_ar < next_ar:
                 best_ar = next_ar
@@ -367,7 +377,7 @@ class WorkerMA(WorkerStandard):
             if starting_angles is None:
                 starting_angles = random.uniform(-np.pi, np.pi, 2 * self.p)
             starting_angles = convert_angles_qaoa_to_ma(starting_angles, len(graph.edges), len(graph))
-        ar, angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles)
+        ar, angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=starting_angles)
         series[self.out_col] = ar
         series[self.out_col + '_angles'] = angles
         series[self.out_col + '_nfev'] = nfev

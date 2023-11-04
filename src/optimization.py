@@ -17,6 +17,7 @@ from scipy.optimize import OptimizeResult
 
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1
 from src.angle_strategies import qaoa_decorator, linear_decorator, tqa_decorator, fix_angles, fourier_decorator
+from src.data_processing import normalize_qaoa_angles
 from src.graph_utils import get_index_edge_list
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
 from src.simulation.plain import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
@@ -207,19 +208,20 @@ def change_sign(func: callable) -> callable:
     return func_changed_sign
 
 
-def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, num_restarts: int = 1, objective_max: float = None, objective_tolerance: float = 0.9995, **kwargs) \
-        -> OptimizeResult:
+def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, num_restarts: int = 1, objective_max: float = None, objective_tolerance: float = 0.9995,
+                         normalize_angles: bool = True, **kwargs) -> OptimizeResult:
     """
     Wrapper around minimizer function that restarts optimization from multiple random starting points to minimize evaluator.
     :param evaluator: Evaluator instance.
-    :param starting_point: Starting point for optimization. Chosen randomly if None.
+    :param starting_angles: Starting point for optimization. Chosen randomly if None.
     :param num_restarts: Number of random starting points to try. Has no effect if specific starting point is provided.
     :param objective_max: Maximum achievable objective. Optimization stops if answer sufficiently close to max_objective is achieved.
     :param objective_tolerance: Fraction of 1 that controls how close the result need to be to objective_max before optimization can be stopped.
+    :param normalize_angles: True to return optimized angles to the [-pi; pi] range.
     :param kwargs: Keyword arguments for optimizer.
     :return: Minimization result.
     """
-    if starting_point is not None:
+    if starting_angles is not None:
         num_restarts = 1
 
     logger = logging.getLogger('QAOA')
@@ -228,8 +230,8 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, n
 
     result_best = None
     for i in range(num_restarts):
-        if starting_point is not None:
-            next_angles = starting_point
+        if starting_angles is not None:
+            next_angles = starting_angles
         else:
             next_angles = random.uniform(-np.pi, np.pi, evaluator.num_angles)
 
@@ -237,7 +239,9 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_point: ndarray = None, n
         if not result.success:
             print(result)
             raise Exception('Optimization failed')
-        result.x = np.arctan2(np.sin(result.x), np.cos(result.x))  # Normalize angle range
+
+        if normalize_angles:
+            result.x = normalize_qaoa_angles(result.x)
 
         if result_best is None or result.fun < result_best.fun:
             result_best = result

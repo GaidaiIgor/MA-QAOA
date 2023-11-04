@@ -70,8 +70,6 @@ def init_dataframe(data_path: str, worker: WorkerBaseQAOA, out_path: str):
         prev_nfev = df.filter(regex=r'r_\d_nfev').sum(axis=1).astype(int)
         df = df.filter(regex='r_10').rename(columns=lambda name: f'p_1{name[4:]}')
         df['p_1_nfev'] += prev_nfev
-        if isinstance(worker, WorkerFourier):
-            df['p_1_angles'] = df['p_1_angles'].apply(numpy_str_to_array).apply(convert_angles_qaoa_to_fourier)
         if isinstance(worker, (WorkerInterp, WorkerFourier)):
             df = df.rename(columns={'p_1_angles': 'p_1_angles_unperturbed'})
             df['p_1_angles_best'] = df['p_1_angles_unperturbed']
@@ -104,14 +102,13 @@ def run_graphs_parallel():
                 # out_path = data_path + 'output/qaoa/random/p_1/out.csv'
                 out_path = data_path + 'output/qaoa/fourier/out.csv'
 
-                # rows_func = lambda df: np.ones((df.shape[0], 1), dtype=bool) if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
-
-                select_rows = np.zeros((1000, 1), dtype=bool)
-                select_rows[:10] = True
-                rows_func = lambda df: select_rows
-
+                rows_func = lambda df: np.ones((df.shape[0], 1), dtype=bool) if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
                 # rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)
                 # rows_func = lambda df: (df[f'p_{p}'] < convergence_threshold) & ((df[f'p_{p}_nfev'] == 1000 * p) | (df[f'p_{p}'] < df[f'p_{p - 1}']))
+
+                # mask = np.zeros((1000, 1), dtype=bool)
+                # mask[:10] = True
+                # rows_func = lambda df: mask
 
                 out_folder = path.split(out_path)[0]
                 if not path.exists(out_folder):
@@ -120,6 +117,22 @@ def run_graphs_parallel():
                     init_dataframe(data_path, worker, out_path)
 
                 optimize_expectation_parallel(out_path, rows_func, num_workers, worker)
+
+
+def run_correct():
+    nodes = list(range(9, 13))
+    depths = list(range(3, 7))
+    for node in nodes:
+        node_depths = [3] if node < 12 else depths
+        for depth in node_depths:
+            data_path = f'graphs/new/nodes_{node}/depth_{depth}/output/qaoa/random/p_1/out.csv'
+            df = pd.read_csv(data_path, index_col=0)
+            for r in range(1, 11):
+                for i in range(1000):
+                    angles = numpy_str_to_array(df.loc[f'graphs/new/nodes_{node}/depth_{depth}//{i}.gml', f'r_{r}_angles'])
+                    angles = angles[angles != 0]
+                    df.loc[f'graphs/new/nodes_{node}/depth_{depth}//{i}.gml', f'r_{r}_angles'] = str(angles)
+            df.to_csv(data_path)
 
 
 def run_merge():
@@ -146,3 +159,4 @@ if __name__ == '__main__':
     # run_merge()
     # generate_graphs()
     run_graphs_parallel()
+    # run_correct()

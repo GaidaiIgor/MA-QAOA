@@ -227,18 +227,13 @@ def merge_dfs(base_path: str, ps: Sequence[int], restarts: Sequence[int], conver
     merged_df.to_csv(out_name)
 
 
-def normalize_angles(angles: ndarray) -> ndarray:
+def normalize_qaoa_angles(angles: ndarray) -> ndarray:
     """
-    Adds +-pi to angles to move them into +-pi/2 range.
-    :param angles: QAOA angles array given in fractions of pi.
-    :return: Normalized angles array.
+    Normalizes angles to the [-pi; pi] range.
+    :param angles: QAOA angles.
+    :return: Normalized angles.
     """
-    normalized = angles.copy()
-    for i in range(len(normalized)):
-        normalized[i] -= int(normalized[i])
-        if normalized[i] > 0.5 or normalized[i] <= -0.5:
-            normalized[i] -= copysign(1, normalized[i])
-    return normalized
+    return np.arctan2(np.sin(angles), np.cos(angles))
 
 
 def round_angles(angles: ndarray) -> ndarray:
