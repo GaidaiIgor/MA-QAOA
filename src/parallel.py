@@ -397,19 +397,19 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     """
     df = pd.read_csv(dataframe_path, index_col=0)
     selected_rows = rows_func(df)
-    rows_to_process = df.loc[selected_rows, :]
+    rows_to_process = list(df.loc[selected_rows, :].iterrows())
     remaining_rows = df.loc[~selected_rows, :]
 
-    if rows_to_process.shape[0] == 0:
+    if len(rows_to_process) == 0:
         return
 
     results = []
     if num_workers == 1:
-        for result in tqdm(map(worker.process_entry, rows_to_process.iterrows()), total=rows_to_process.shape[0], smoothing=0, ascii=' █'):
+        for result in tqdm(map(worker.process_entry, rows_to_process), total=len(rows_to_process), smoothing=0, ascii=' █'):
             results.append(result)
     else:
         with Pool(num_workers) as pool:
-            for result in tqdm(pool.imap(worker.process_entry, rows_to_process.iterrows()), total=rows_to_process.shape[0], smoothing=0, ascii=' █'):
+            for result in tqdm(pool.imap(worker.process_entry, rows_to_process), total=len(rows_to_process), smoothing=0, ascii=' █'):
                 results.append(result)
 
     df = pd.concat((DataFrame(results), remaining_rows)).sort_index(key=natsort_keygen())
