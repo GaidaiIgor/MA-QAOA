@@ -230,8 +230,8 @@ def plot_min_ar_vs_p_experimental_test():
     # methods = ['ma/explicit/out.csv', 'ma/random/qaoa/out.csv', 'ma/random/ma/out_r1.csv', 'gen1/out.csv', 'gen12e/out.csv', 'xqaoa/random/out.csv', 'xqaoa/explicit/out.csv']
     # labels = ['Optimal QAOA -> MA', 'Random QAOA -> MA', 'Random MA', 'Generalized 1', 'Generalized 2(e)', 'Random XQAOA', 'Optimal QAOA -> XQAOA']
 
-    methods = ['qaoa/random/out_rp.csv', 'qaoa/greedy/out.csv', 'qaoa/interp/out.csv']
-    labels = ['Random', 'Greedy', 'Interp']
+    methods = ['qaoa/random/out_rp.csv', 'qaoa/greedy/out.csv', 'qaoa/interp/out.csv', 'qaoa/fourier/out.csv']
+    labels = ['Random', 'Greedy', 'Interp', 'Fourier']
 
     nodes = range(9, 10)
     lines = []

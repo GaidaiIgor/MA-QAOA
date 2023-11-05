@@ -250,8 +250,9 @@ class WorkerIterativePerturb(WorkerStandard):
 
     def process_entry(self, entry: tuple[str, Series]) -> Series:
         path, series = entry
-        angles_unperturbed = numpy_str_to_array(series[self.initial_guess_from + '_angles_unperturbed'])
-        angles_best = numpy_str_to_array(series[self.initial_guess_from + '_angles_best'])
+        angle_suffixes = ['_angles_unperturbed', '_angles_best'] if self.initial_guess_from + '_angles_unperturbed' in series else ['_angles', '_angles']
+        angles_unperturbed = numpy_str_to_array(series[self.initial_guess_from + angle_suffixes[0]])
+        angles_best = numpy_str_to_array(series[self.initial_guess_from + angle_suffixes[1]])
 
         if self.search_space == 'fourier':
             angles_unperturbed = convert_angles_qaoa_to_fourier(angles_unperturbed)
@@ -262,14 +263,15 @@ class WorkerIterativePerturb(WorkerStandard):
             angles_best = normalize_qaoa_angles(convert_angles_fourier_to_qaoa(angles_best))
 
         series[self.out_col] = ar_best
-        series[self.out_col + '_angles_best'] = angles_best
+        series[self.out_col + angle_suffixes[1]] = angles_best
         series[self.out_col + '_nfev'] = total_nfev
-        series[self.out_col + '_angles_unperturbed'] = new_angles_unperturbed
+        if angle_suffixes[0] != angle_suffixes[1]:
+            series[self.out_col + angle_suffixes[0]] = new_angles_unperturbed
         return series
 
     def postprocess_dataframe(self, dataframe: DataFrame) -> DataFrame:
         if self.transfer_from is not None:
-            angle_suffixes = ['_angles_unperturbed', '_angles_best']
+            angle_suffixes = ['_angles_unperturbed', '_angles_best'] if self.transfer_from + '_angles_unperturbed' in dataframe else ['_angles']
             dataframe = transfer_expectation_columns(dataframe, self.transfer_from, self.out_col, angle_suffixes, self.transfer_p, self.p, True)
         self.cast_nfev_to_int(dataframe)
         return dataframe
