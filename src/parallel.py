@@ -211,10 +211,13 @@ class WorkerIterativePerturb(WorkerStandard):
     """ Worker that implements the common functionality for iterative generation of the initial guess for next p with perturbations.
     The angle extension function has to be implemented by a child. """
     alpha: float
+    num_attempts: int = None
 
     def __post_init__(self):
         if self.p < 2:
             raise Exception('p has to be > 1 for iterative workers')
+        if self.num_attempts is None:
+            self.num_attempts = self.p
 
     def extend_angles(self, angles: ndarray) -> ndarray:
         """
@@ -235,7 +238,7 @@ class WorkerIterativePerturb(WorkerStandard):
         normalize_angles = self.search_space != 'fourier'
         perturbations_start = 1 if all(angles_unperturbed == angles_best) else 2
         optimization_results = []
-        for i in range(self.p):
+        for i in range(self.num_attempts):
             starting_angles = angles_unperturbed if i == 0 else angles_best
             if i >= perturbations_start:
                 perturbation = self.alpha * random.normal(scale=abs(starting_angles))
@@ -307,11 +310,14 @@ class WorkerFourier(WorkerIterativePerturb):
 class WorkerGreedy(WorkerStandard):
     """ Worker that implements greedy strategy for QAOA (p + 1 optimizations from transition states). """
     search_space: str = field(init=False)
+    num_attempts: int = None
 
     def __post_init__(self):
         if self.p < 2:
             raise Exception('p has to be > 1 for WorkerGreedy')
         self.search_space = 'qaoa'
+        if self.num_attempts is None:
+            self.num_attempts = self.p
 
     def process_entry_core(self, path: str, starting_angles: ndarray) -> tuple:
         """
@@ -320,11 +326,12 @@ class WorkerGreedy(WorkerStandard):
         :param starting_angles: Starting angles for optimization.
         :return: 1) Best found AR; 2) Corresponding angles; 3) Total number of function evaluations.
         """
+        selected_transitions = random.choice(np.arange(self.p), self.num_attempts, False)
         best_ar = 0
         best_angles = None
         total_nfev = 0
-        for insert_layer in range(self.p):
-            next_transition_state = np.concatenate((starting_angles[:2 * insert_layer], [0] * 2, starting_angles[2 * insert_layer:]))
+        for transition_ind in selected_transitions:
+            next_transition_state = np.concatenate((starting_angles[:2 * transition_ind], [0] * 2, starting_angles[2 * transition_ind:]))
             next_ar, next_angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=next_transition_state)
             total_nfev += nfev
             if best_ar < next_ar:
