@@ -84,17 +84,17 @@ def init_dataframe(data_path: str, worker: WorkerBaseQAOA, out_path: str):
 def run_graphs_parallel():
     nodes = list(range(9, 10))
     depths = list(range(3, 7))
-    ps = list(range(2, 11))
+    ps = list(range(1, 11))
 
-    num_workers = 20
+    num_workers = 1
     convergence_threshold = 0.9995
     reader = partial(nx.read_gml, destringizer=int)
 
     for p in ps:
         # worker = WorkerStandard(reader=reader, p=p, out_col=f'r_1', initial_guess_from=None, transfer_from=None, transfer_p=None, search_space='qaoa')
-        worker = WorkerInterp(reader=reader, p=p, out_col=f'p_{p}', initial_guess_from=f'p_{p - 1}', transfer_from=f'p_{p - 1}', transfer_p=p - 1, alpha=0.6)
+        # worker = WorkerInterp(reader=reader, p=p, out_col=f'p_{p}', initial_guess_from=f'p_{p - 1}', transfer_from=f'p_{p - 1}', transfer_p=p - 1, alpha=0.6)
         # worker = WorkerFourier(reader=reader, p=p, out_col=f'p_{p}', initial_guess_from=f'p_{p - 1}', transfer_from=f'p_{p - 1}', transfer_p=p - 1, alpha=0.6)
-        # worker = WorkerLinear(reader=reader, p=p, out_col=f'p_{p}', initial_guess_from=None, transfer_from=None, transfer_p=None, search_space='tqa')
+        worker = WorkerLinear(reader=reader, p=p, out_col=f'p_{p}', initial_guess_from=None, transfer_from=f'p_{p - 1}', transfer_p=p - 1, search_space='tqa')
 
         for node in nodes:
             node_depths = [3] if node < 12 else depths
@@ -102,7 +102,7 @@ def run_graphs_parallel():
                 data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
 
                 # out_path = data_path + 'output/qaoa/random/p_1/out.csv'
-                out_path = data_path + 'output/qaoa/interp/out.csv'
+                out_path = data_path + 'output/qaoa/tqa/out.csv'
 
                 rows_func = lambda df: np.ones((df.shape[0], 1), dtype=bool) if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
                 # rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)

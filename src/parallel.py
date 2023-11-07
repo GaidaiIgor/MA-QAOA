@@ -182,34 +182,59 @@ class WorkerStandard(WorkerBaseQAOA):
         return series
 
 
+@dataclass(kw_only=True)
 class WorkerLinear(WorkerStandard):
-    """ Worker that implements linear angle initialization strategies (linear and tqa). """
+    """
+    Worker that implements linear angle initialization strategies (linear and tqa).
+    :var num_attempts: Number of optimization attempts.
+    """
+    num_attempts: int = None
+
     def __post_init__(self):
         if self.search_space != 'linear' and self.search_space != 'tqa':
             raise Exception('Search space must be linear or tqa for WorkerLinear')
+        if self.num_attempts is None:
+            self.num_attempts = self.p
 
     def process_entry(self, entry: tuple[str, Series]) -> Series:
         path, series = entry
-        _, linear_angles, total_nfev = WorkerStandard.process_entry_core(self, path, starting_angles=None)
+        optimization_results = []
+        tried_angles = []
+        similarity_threshold = 1e-3
+        for i in range(self.num_attempts):
+            _, linear_angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=None)
+            while True:
+                angle_diff = np.array([max(abs(linear_angles - angles)) for angles in tried_angles])
+                if len(angle_diff) == 0 or any(angle_diff > similarity_threshold):
+                    break
+                linear_angles = random.uniform(-np.pi, np.pi, len(linear_angles))
+            tried_angles.append(linear_angles)
 
-        if self.search_space == 'tqa':
-            qaoa_angles = convert_angles_tqa_to_qaoa(linear_angles, self.p)
-        elif self.search_space == 'linear':
-            qaoa_angles = convert_angles_linear_to_qaoa(linear_angles, self.p)
+            if self.search_space == 'tqa':
+                qaoa_angles = convert_angles_tqa_to_qaoa(linear_angles, self.p)
+            elif self.search_space == 'linear':
+                qaoa_angles = convert_angles_linear_to_qaoa(linear_angles, self.p)
 
-        ar, angles, nfev = WorkerStandard.process_entry_core(self, path, 'qaoa', starting_angles=qaoa_angles)
-        total_nfev += nfev
+            result = list(WorkerStandard.process_entry_core(self, path, 'qaoa', starting_angles=qaoa_angles))
+            result[2] += nfev
+            optimization_results.append(result)
 
-        series[self.out_col] = ar
-        series[self.out_col + '_angles'] = angles
-        series[self.out_col + '_nfev'] = nfev
+        df = DataFrame(optimization_results)
+        best_ind = np.argmax(df.iloc[:, 0])
+        series[self.out_col] = df.iloc[best_ind, 0]
+        series[self.out_col + '_angles'] = df.iloc[best_ind, 1]
+        series[self.out_col + '_nfev'] = sum(df.iloc[:, 2])
         return series
 
 
 @dataclass(kw_only=True)
 class WorkerIterativePerturb(WorkerStandard):
-    """ Worker that implements the common functionality for iterative generation of the initial guess for next p with perturbations.
-    The angle extension function has to be implemented by a child. """
+    """
+    Worker that implements the common functionality for iterative generation of the initial guess for next p with perturbations.
+    The angle extension function has to be implemented by a child.
+    :var alpha: Perturbation multiplier coefficient.
+    :var num_attempts: Number of optimization attempts.
+    """
     alpha: float
     num_attempts: int = None
 
@@ -317,7 +342,10 @@ class WorkerFourier(WorkerIterativePerturb):
 
 @dataclass(kw_only=True)
 class WorkerGreedy(WorkerStandard):
-    """ Worker that implements greedy strategy for QAOA (p + 1 optimizations from transition states). """
+    """
+    Worker that implements greedy strategy for QAOA (p + 1 optimizations from transition states).
+    :var num_attempts: Number of optimization attempts.
+    """
     search_space: str = field(init=False)
     num_attempts: int = None
 
