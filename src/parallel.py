@@ -252,18 +252,22 @@ class WorkerIterativePerturb(WorkerStandard):
         """
         raise Exception('This method is not implemented in the base class. Use the derived classes.')
 
-    def process_entry_core(self, path: str, angles_best: ndarray, angles_unperturbed: ndarray = None) -> list:
+    def process_entry_core(self, path: str, angles_best: ndarray, angles_unperturbed: ndarray = None, num_attempts: int = None) -> list:
         """
         Core functionality of process_entry with plain input and output arguments instead of a series.
         :param path: Path to the graph file.
         :param angles_best: Best overall angles from the previous layer.
         :param angles_unperturbed: Best unperturbed angles from the previous layer.
+        :param num_attempts: Number of attempts, or None to use self.num_attempts.
         :return: 1) Best AR; 2) Best angles; 3) Total number of function evaluations; 4) Optimized unperturbed angles for this layer (if given).
         """
+        if num_attempts is None:
+            num_attempts = self.num_attempts
         normalize_angles = self.search_space != 'fourier'
         perturbations_start = 1 if angles_unperturbed is None or all(angles_unperturbed == angles_best) else 2
+
         optimization_results = []
-        for i in range(self.num_attempts):
+        for i in range(num_attempts):
             starting_angles = angles_unperturbed if angles_unperturbed is not None and i == 0 else angles_best
             if i >= perturbations_start:
                 perturbation = self.alpha * random.normal(scale=abs(starting_angles))
@@ -356,14 +360,17 @@ class WorkerGreedy(WorkerStandard):
         if self.num_attempts is None:
             self.num_attempts = self.p
 
-    def process_entry_core(self, path: str, starting_angles: ndarray) -> tuple:
+    def process_entry_core(self, path: str, starting_angles: ndarray, num_attempts: int = None) -> tuple:
         """
         Core functionality of process_entry with plain input and output arguments instead of a series.
         :param path: Path to the graph file.
         :param starting_angles: Starting angles for optimization.
+        :param num_attempts: Number of optimization attempts, or None to use self.num_attempts.
         :return: 1) Best found AR; 2) Corresponding angles; 3) Total number of function evaluations.
         """
-        selected_transitions = random.choice(np.arange(self.p), self.num_attempts, False)
+        if num_attempts is None:
+            num_attempts = self.num_attempts
+        selected_transitions = random.choice(np.arange(self.p), num_attempts, False)
         best_ar = 0
         best_angles = None
         total_nfev = 0
@@ -394,21 +401,35 @@ class WorkerCombined(WorkerInterp, WorkerGreedy):
     def __post_init__(self):
         self.search_space = 'qaoa'
 
+    @staticmethod
+    def distribute_attempts(num_attempts: int, desired_fractions: list) -> ndarray:
+        """
+        Distributes the specified number of attempts between methods trying to respect the specified fractions for each method.
+        :param num_attempts: Total number of attempts.
+        :param desired_fractions: Fraction of attempts for each method.
+        :return: Number of attempts for each method.
+        """
+        method_attempts = np.zeros_like(desired_fractions, dtype=int)
+        for i in range(num_attempts):
+            errors = abs(method_attempts / num_attempts - desired_fractions)
+            highest_error = np.argmax(errors)
+            method_attempts[highest_error] += 1
+        return method_attempts
+
     def process_entry(self, entry: tuple[str, Series]) -> Series:
         path, series = entry
-        angles_unperturbed = numpy_str_to_array(series[self.initial_guess_from + '_angles_unperturbed'])
-        angles_best = numpy_str_to_array(series[self.initial_guess_from + '_angles_best'])
+        angles_best = numpy_str_to_array(series[self.initial_guess_from + '_angles'])
         optimization_results = [None] * 2
 
-        optimization_results[0] = WorkerInterp.process_entry_core(self, path, angles_best, angles_unperturbed)
-        optimization_results[1] = WorkerGreedy.process_entry_core(self, path, angles_best)
+        method_attempts = WorkerCombined.distribute_attempts(self.num_attempts, [0.5, 0.5])
+        optimization_results[0] = WorkerInterp.process_entry_core(self, path, angles_best, num_attempts=method_attempts[0])
+        optimization_results[1] = WorkerGreedy.process_entry_core(self, path, angles_best, num_attempts=method_attempts[1])
 
         df = DataFrame(optimization_results)
         best_ind = np.argmax(df.iloc[:, 0])
         series[self.out_col] = df.iloc[best_ind, 0]
-        series[self.out_col + '_angles_best'] = df.iloc[best_ind, 1]
+        series[self.out_col + '_angles'] = df.iloc[best_ind, 1]
         series[self.out_col + '_nfev'] = sum(df.iloc[:, 2])
-        series[self.out_col + '_angles_unperturbed'] = df.iloc[0, 3]
         return series
 
 
