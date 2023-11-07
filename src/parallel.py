@@ -227,19 +227,19 @@ class WorkerIterativePerturb(WorkerStandard):
         """
         raise Exception('This method is not implemented in the base class. Use the derived classes.')
 
-    def process_entry_core(self, path: str, angles_unperturbed: ndarray, angles_best: ndarray) -> tuple:
+    def process_entry_core(self, path: str, angles_best: ndarray, angles_unperturbed: ndarray = None) -> list:
         """
         Core functionality of process_entry with plain input and output arguments instead of a series.
         :param path: Path to the graph file.
-        :param angles_unperturbed: Best unperturbed angles from the previous layer.
         :param angles_best: Best overall angles from the previous layer.
-        :return: 1) Best AR; 2) Best angles; 3) Total number of function evaluations; 4) Optimized unperturbed angles for this layer.
+        :param angles_unperturbed: Best unperturbed angles from the previous layer.
+        :return: 1) Best AR; 2) Best angles; 3) Total number of function evaluations; 4) Optimized unperturbed angles for this layer (if given).
         """
         normalize_angles = self.search_space != 'fourier'
-        perturbations_start = 1 if all(angles_unperturbed == angles_best) else 2
+        perturbations_start = 1 if angles_unperturbed is None or all(angles_unperturbed == angles_best) else 2
         optimization_results = []
         for i in range(self.num_attempts):
-            starting_angles = angles_unperturbed if i == 0 else angles_best
+            starting_angles = angles_unperturbed if angles_unperturbed is not None and i == 0 else angles_best
             if i >= perturbations_start:
                 perturbation = self.alpha * random.normal(scale=abs(starting_angles))
                 starting_angles += perturbation
@@ -249,27 +249,36 @@ class WorkerIterativePerturb(WorkerStandard):
 
         df = DataFrame(optimization_results)
         best_ind = np.argmax(df.iloc[:, 0])
-        return df.iloc[best_ind, 0], df.iloc[best_ind, 1], sum(df.iloc[:, 2]), df.iloc[0, 1]
+        best_result = [df.iloc[best_ind, 0], df.iloc[best_ind, 1], sum(df.iloc[:, 2])]
+        if angles_unperturbed is not None:
+            best_result += [df.iloc[0, 1]]
+        return best_result
 
     def process_entry(self, entry: tuple[str, Series]) -> Series:
         path, series = entry
-        angle_suffixes = ['_angles_unperturbed', '_angles_best'] if self.initial_guess_from + '_angles_unperturbed' in series else ['_angles', '_angles']
-        angles_unperturbed = numpy_str_to_array(series[self.initial_guess_from + angle_suffixes[0]])
-        angles_best = numpy_str_to_array(series[self.initial_guess_from + angle_suffixes[1]])
+        if self.initial_guess_from + '_angles_unperturbed' in series:
+            angles_unperturbed = numpy_str_to_array(series[self.initial_guess_from + '_angles_unperturbed'])
+            angle_suffix = '_angles_best'
+        else:
+            angles_unperturbed = None
+            angle_suffix = '_angles'
+        angles_best = numpy_str_to_array(series[self.initial_guess_from + angle_suffix])
 
         if self.search_space == 'fourier':
-            angles_unperturbed = convert_angles_qaoa_to_fourier(angles_unperturbed)
+            if angles_unperturbed is not None:
+                angles_unperturbed = convert_angles_qaoa_to_fourier(angles_unperturbed)
             angles_best = convert_angles_qaoa_to_fourier(angles_best)
-        ar_best, angles_best, total_nfev, new_angles_unperturbed = self.process_entry_core(path, angles_unperturbed, angles_best)
+        result = list(self.process_entry_core(path, angles_best, angles_unperturbed))
         if self.search_space == 'fourier':
-            new_angles_unperturbed = normalize_qaoa_angles(convert_angles_fourier_to_qaoa(new_angles_unperturbed))
-            angles_best = normalize_qaoa_angles(convert_angles_fourier_to_qaoa(angles_best))
+            if angles_unperturbed is not None:
+                result[3] = normalize_qaoa_angles(convert_angles_fourier_to_qaoa(result[3]))
+            result[1] = normalize_qaoa_angles(convert_angles_fourier_to_qaoa(result[1]))
 
-        series[self.out_col] = ar_best
-        series[self.out_col + angle_suffixes[1]] = angles_best
-        series[self.out_col + '_nfev'] = total_nfev
-        if angle_suffixes[0] != angle_suffixes[1]:
-            series[self.out_col + angle_suffixes[0]] = new_angles_unperturbed
+        series[self.out_col] = result[0]
+        series[self.out_col + angle_suffix] = angles_best
+        series[self.out_col + '_nfev'] = result[2]
+        if self.initial_guess_from + '_angles_unperturbed' in series:
+            series[self.out_col + '_angles_unperturbed'] = result[3]
         return series
 
     def postprocess_dataframe(self, dataframe: DataFrame) -> DataFrame:
@@ -363,7 +372,7 @@ class WorkerCombined(WorkerInterp, WorkerGreedy):
         angles_best = numpy_str_to_array(series[self.initial_guess_from + '_angles_best'])
         optimization_results = [None] * 2
 
-        optimization_results[0] = WorkerInterp.process_entry_core(self, path, angles_unperturbed, angles_best)
+        optimization_results[0] = WorkerInterp.process_entry_core(self, path, angles_best, angles_unperturbed)
         optimization_results[1] = WorkerGreedy.process_entry_core(self, path, angles_best)
 
         df = DataFrame(optimization_results)
