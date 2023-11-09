@@ -230,8 +230,8 @@ def plot_min_ar_vs_p_experimental_test():
     # methods = ['ma/explicit/out.csv', 'ma/random/qaoa/out.csv', 'ma/random/ma/out_r1.csv', 'gen1/out.csv', 'gen12e/out.csv', 'xqaoa/random/out.csv', 'xqaoa/explicit/out.csv']
     # labels = ['Optimal QAOA -> MA', 'Random QAOA -> MA', 'Random MA', 'Generalized 1', 'Generalized 2(e)', 'Random XQAOA', 'Optimal QAOA -> XQAOA']
 
-    methods = ['qaoa/random/out_rp.csv', 'qaoa/greedy/out.csv', 'qaoa/interp/out.csv', 'qaoa/fourier/out.csv']
-    labels = ['Random', 'Greedy', 'Interp', 'Fourier']
+    methods = ['qaoa/random/out_r1.csv', 'qaoa/greedy/out.csv', 'qaoa/interp/out.csv', 'qaoa/fourier/out.csv', 'qaoa/tqa/out.csv', 'qaoa/combined/out.csv', 'qaoa/constant/out.csv']
+    labels = ['Random', 'Greedy', 'Interp', 'Fourier', 'TQA', 'Combined', 'Constant']
 
     nodes = range(9, 10)
     lines = []
@@ -240,11 +240,11 @@ def plot_min_ar_vs_p_experimental_test():
             ps, p_series = get_column_statistic(f'graphs/new/nodes_{n}/depth_3/output/{method}', r'p_\d+$', min)
             lines.append(Line(ps, p_series, colors[method_ind]))
 
-    x_lim = [0.75, 11.25]
+    x_lim = [0.75, 10.25]
     plot_general(lines, ('p', 'Min AR'), (1, 0.02), (*x_lim, None, 1.005))
     plt.legend(labels, loc='lower right', fontsize='small')
     plt.plot(x_lim, [1, 1], 'k--')
-    plt.plot(x_lim, [0.95, 0.95], 'r--')
+    plt.plot(x_lim, [16/17, 16/17], 'r--')
     save_figure()
     plt.show()
 

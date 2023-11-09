@@ -10,7 +10,8 @@ from pandas import DataFrame
 from src.angle_strategies import convert_angles_qaoa_to_fourier
 from src.data_processing import collect_results_from, merge_dfs, numpy_str_to_array
 from src.graph_utils import get_max_edge_depth, is_isomorphic
-from src.parallel import optimize_expectation_parallel, WorkerFourier, WorkerStandard, WorkerBaseQAOA, WorkerInterp, WorkerGreedy, WorkerMA, WorkerLinear
+from src.parallel import optimize_expectation_parallel, WorkerFourier, WorkerStandard, WorkerBaseQAOA, WorkerInterp, WorkerGreedy, WorkerMA, WorkerLinear, WorkerCombined, \
+    WorkerConstant
 
 
 def collect_results_xqaoa():
@@ -65,7 +66,7 @@ def init_dataframe(data_path: str, worker: WorkerBaseQAOA, out_path: str):
     if worker.initial_guess_from is None:
         paths = [f'{data_path}/{i}.gml' for i in range(1000)]
         df = DataFrame(paths).set_axis(['path'], axis=1).set_index('path')
-    elif isinstance(worker, (WorkerInterp, WorkerFourier, WorkerGreedy)):
+    elif isinstance(worker, (WorkerInterp, WorkerFourier, WorkerGreedy, WorkerCombined)):
         df = pd.read_csv(f'{data_path}/output/qaoa/random/p_1/out.csv', index_col=0)
         prev_nfev = df.filter(regex=r'r_\d_nfev').sum(axis=1).astype(int)
         df = df.filter(regex='r_10').rename(columns=lambda name: f'p_1{name[4:]}')
@@ -86,30 +87,40 @@ def run_graphs_parallel():
     depths = list(range(3, 7))
     ps = list(range(1, 11))
 
-    num_workers = 1
+    num_workers = 20
     convergence_threshold = 0.9995
     reader = partial(nx.read_gml, destringizer=int)
 
     for p in ps:
+        out_path_suffix = 'output/qaoa/tqa/attempts_1/out.csv'
+        out_col = f'p_{p}'
+        initial_guess_from = None if p == 1 else f'p_{p - 1}'
+        transfer_from = None if p == 1 else f'p_{p - 1}'
+        transfer_p = None if p == 1 else p - 1
+
         # worker = WorkerStandard(reader=reader, p=p, out_col=f'r_1', initial_guess_from=None, transfer_from=None, transfer_p=None, search_space='qaoa')
-        # worker = WorkerInterp(reader=reader, p=p, out_col=f'p_{p}', initial_guess_from=f'p_{p - 1}', transfer_from=f'p_{p - 1}', transfer_p=p - 1, alpha=0.6)
-        # worker = WorkerFourier(reader=reader, p=p, out_col=f'p_{p}', initial_guess_from=f'p_{p - 1}', transfer_from=f'p_{p - 1}', transfer_p=p - 1, alpha=0.6)
-        worker = WorkerLinear(reader=reader, p=p, out_col=f'p_{p}', initial_guess_from=None, transfer_from=f'p_{p - 1}', transfer_p=p - 1, search_space='tqa')
+        # worker_constant = WorkerConstant(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p)
+        worker_tqa = WorkerLinear(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p, search_space='tqa')
+        # worker_interp = WorkerInterp(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
+        # worker = WorkerFourier(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
+        # worker_greedy = WorkerGreedy(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p)
+
+        # worker_combined = WorkerCombined(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p,
+        #                                  workers=[worker_interp, worker_greedy], restart_shares=[0.5, 0.5])
+        worker = worker_tqa
 
         for node in nodes:
             node_depths = [3] if node < 12 else depths
             for depth in node_depths:
                 data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
-
-                # out_path = data_path + 'output/qaoa/random/p_1/out.csv'
-                out_path = data_path + 'output/qaoa/tqa/out.csv'
+                out_path = data_path + out_path_suffix
 
                 rows_func = lambda df: np.ones((df.shape[0], 1), dtype=bool) if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
                 # rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)
                 # rows_func = lambda df: (df[f'p_{p}'] < convergence_threshold) & ((df[f'p_{p}_nfev'] == 1000 * p) | (df[f'p_{p}'] < df[f'p_{p - 1}']))
 
                 # mask = np.zeros((1000, 1), dtype=bool)
-                # mask[539] = True
+                # mask[508] = True
                 # rows_func = lambda df: mask
 
                 out_folder = path.split(out_path)[0]
@@ -150,15 +161,14 @@ def run_merge():
             node_depths = [3] if node < 12 else depths
             for depth in node_depths:
                 base_path = f'graphs/new/nodes_{node}/depth_{depth}/output/{method}/random'
-                restarts = np.arange(ps[-1]) + 1
-                restarts[0] = 10
+                restarts = ps
                 merge_dfs(base_path, ps, restarts, convergence_threshold, f'{base_path}/out_rp.csv', copy_better)
 
 
 if __name__ == '__main__':
     np.set_printoptions(threshold=np.inf, linewidth=np.inf)
 
-    # run_merge()
     # generate_graphs()
     run_graphs_parallel()
+    # run_merge()
     # run_correct()

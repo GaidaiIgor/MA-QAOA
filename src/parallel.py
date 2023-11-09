@@ -121,6 +121,7 @@ class WorkerGeneral(WorkerBaseQAOA):
         return series
 
 
+@dataclass(kw_only=True)
 class WorkerGeneralSub(WorkerGeneral):
     """ Implements entry processing with Generalized QAOA on subgraphs. """
 
@@ -147,6 +148,7 @@ class WorkerGeneralSub(WorkerGeneral):
         return series
 
 
+@dataclass(kw_only=True)
 class WorkerStandard(WorkerBaseQAOA):
     """ Implements standard processing with plain or random starting angles. """
 
@@ -163,11 +165,10 @@ class WorkerStandard(WorkerBaseQAOA):
 
         graph = self.reader(path)
         evaluator = Evaluator.get_evaluator_standard_maxcut(graph, self.p, search_space=search_space)
-        method = 'COBYLA'
         options = {'maxiter': np.iinfo(np.int32).max}
 
         try:
-            result = optimize_qaoa_angles(evaluator, **optimize_args, method=method, options=options)
+            result = optimize_qaoa_angles(evaluator, options=options, **optimize_args)
         except Exception:
             raise Exception(f'Optimization failed at {path}')
         return -result.fun / graph.graph['maxcut'], result.x, result.nfev
@@ -183,18 +184,36 @@ class WorkerStandard(WorkerBaseQAOA):
 
 
 @dataclass(kw_only=True)
+class WorkerConstant(WorkerStandard):
+    """ Worker that tries to start from all gamma = -0.01, all beta = 0.01. """
+    search_space: str = field(init=False)
+
+    def __post_init__(self):
+        self.search_space = 'qaoa'
+
+    def process_entry(self, entry: tuple[str, Series]) -> Series:
+        path, series = entry
+        gammas = [-0.01] * self.p
+        betas = [0.01] * self.p
+        starting_angles = np.array(list(it.chain(*zip(gammas, betas))))
+        ar, angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=starting_angles)
+        series[self.out_col] = ar
+        series[self.out_col + '_angles'] = angles
+        series[self.out_col + '_nfev'] = nfev
+        return series
+
+
+@dataclass(kw_only=True)
 class WorkerLinear(WorkerStandard):
     """
     Worker that implements linear angle initialization strategies (linear and tqa).
     :var num_attempts: Number of optimization attempts.
     """
-    num_attempts: int = None
+    num_attempts: int = 1
 
     def __post_init__(self):
         if self.search_space != 'linear' and self.search_space != 'tqa':
             raise Exception('Search space must be linear or tqa for WorkerLinear')
-        if self.num_attempts is None:
-            self.num_attempts = self.p
 
     def process_entry(self, entry: tuple[str, Series]) -> Series:
         path, series = entry
@@ -236,13 +255,11 @@ class WorkerIterativePerturb(WorkerStandard):
     :var num_attempts: Number of optimization attempts.
     """
     alpha: float
-    num_attempts: int = None
+    num_attempts: int = 1
 
     def __post_init__(self):
         if self.p < 2:
             raise Exception('p has to be > 1 for iterative workers')
-        if self.num_attempts is None:
-            self.num_attempts = self.p
 
     def extend_angles(self, angles: ndarray) -> ndarray:
         """
@@ -252,11 +269,11 @@ class WorkerIterativePerturb(WorkerStandard):
         """
         raise Exception('This method is not implemented in the base class. Use the derived classes.')
 
-    def process_entry_core(self, path: str, angles_best: ndarray, angles_unperturbed: ndarray = None, num_attempts: int = None) -> list:
+    def process_entry_core(self, path: str, starting_angles: ndarray, angles_unperturbed: ndarray = None, num_attempts: int = None) -> list:
         """
         Core functionality of process_entry with plain input and output arguments instead of a series.
         :param path: Path to the graph file.
-        :param angles_best: Best overall angles from the previous layer.
+        :param starting_angles: Best overall angles from the previous layer.
         :param angles_unperturbed: Best unperturbed angles from the previous layer.
         :param num_attempts: Number of attempts, or None to use self.num_attempts.
         :return: 1) Best AR; 2) Best angles; 3) Total number of function evaluations; 4) Optimized unperturbed angles for this layer (if given).
@@ -264,16 +281,16 @@ class WorkerIterativePerturb(WorkerStandard):
         if num_attempts is None:
             num_attempts = self.num_attempts
         normalize_angles = self.search_space != 'fourier'
-        perturbations_start = 1 if angles_unperturbed is None or all(angles_unperturbed == angles_best) else 2
+        perturbations_start = 1 if angles_unperturbed is None or all(angles_unperturbed == starting_angles) else 2
 
         optimization_results = []
         for i in range(num_attempts):
-            starting_angles = angles_unperturbed if angles_unperturbed is not None and i == 0 else angles_best
+            next_starting_angles = angles_unperturbed if angles_unperturbed is not None and i == 0 else starting_angles
             if i >= perturbations_start:
-                perturbation = self.alpha * random.normal(scale=abs(starting_angles))
-                starting_angles += perturbation
-            starting_angles = self.extend_angles(starting_angles)
-            result = WorkerStandard.process_entry_core(self, path, starting_angles=starting_angles, normalize_angles=normalize_angles)
+                perturbation = self.alpha * random.normal(scale=abs(next_starting_angles))
+                next_starting_angles += perturbation
+            next_starting_angles = self.extend_angles(next_starting_angles)
+            result = WorkerStandard.process_entry_core(self, path, starting_angles=next_starting_angles, normalize_angles=normalize_angles)
             optimization_results.append(result)
 
         df = DataFrame(optimization_results)
@@ -351,14 +368,12 @@ class WorkerGreedy(WorkerStandard):
     :var num_attempts: Number of optimization attempts.
     """
     search_space: str = field(init=False)
-    num_attempts: int = None
+    num_attempts: int = 1
 
     def __post_init__(self):
         if self.p < 2:
             raise Exception('p has to be > 1 for WorkerGreedy')
         self.search_space = 'qaoa'
-        if self.num_attempts is None:
-            self.num_attempts = self.p
 
     def process_entry_core(self, path: str, starting_angles: ndarray, num_attempts: int = None) -> tuple:
         """
@@ -376,7 +391,7 @@ class WorkerGreedy(WorkerStandard):
         total_nfev = 0
         for transition_ind in selected_transitions:
             next_transition_state = np.concatenate((starting_angles[:2 * transition_ind], [0] * 2, starting_angles[2 * transition_ind:]))
-            next_ar, next_angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=next_transition_state)
+            next_ar, next_angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=next_transition_state, method='Nelder-Mead')
             total_nfev += nfev
             if best_ar < next_ar:
                 best_ar = next_ar
@@ -394,11 +409,20 @@ class WorkerGreedy(WorkerStandard):
 
 
 @dataclass(kw_only=True)
-class WorkerCombined(WorkerInterp, WorkerGreedy):
-    """ Worker that tries multiple angle strategies for QAOA. """
+class WorkerCombined(WorkerStandard):
+    """
+    Worker that executes multiple other workers.
+    :var workers: List of workers to try. Each worker must implement process_entry_core(path, previous_p_best_angles, num_attempts).
+    :var attempt_shares: Share of self.num_attempts of each worker.
+    """
     search_space: str = field(init=False)
+    num_attempts: int = 1
+    workers: list[WorkerStandard]
+    attempt_shares: list[float]
 
     def __post_init__(self):
+        if len(self.workers) != len(self.attempt_shares):
+            raise Exception('The lengths of workers and restart_shares must be the same')
         self.search_space = 'qaoa'
 
     @staticmethod
@@ -418,12 +442,12 @@ class WorkerCombined(WorkerInterp, WorkerGreedy):
 
     def process_entry(self, entry: tuple[str, Series]) -> Series:
         path, series = entry
-        angles_best = numpy_str_to_array(series[self.initial_guess_from + '_angles'])
-        optimization_results = [None] * 2
+        starting_angles = numpy_str_to_array(series[self.initial_guess_from + '_angles'])
+        optimization_results = [None] * len(self.workers)
 
-        method_attempts = WorkerCombined.distribute_attempts(self.num_attempts, [0.5, 0.5])
-        optimization_results[0] = WorkerInterp.process_entry_core(self, path, angles_best, num_attempts=method_attempts[0])
-        optimization_results[1] = WorkerGreedy.process_entry_core(self, path, angles_best, num_attempts=method_attempts[1])
+        method_attempts = WorkerCombined.distribute_attempts(self.num_attempts, self.attempt_shares)
+        for i in range(len(self.workers)):
+            optimization_results[i] = self.workers[i].process_entry_core(path, starting_angles=starting_angles, num_attempts=method_attempts[i])
 
         df = DataFrame(optimization_results)
         best_ind = np.argmax(df.iloc[:, 0])

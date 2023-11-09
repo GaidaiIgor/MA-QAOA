@@ -208,12 +208,13 @@ def change_sign(func: callable) -> callable:
     return func_changed_sign
 
 
-def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, num_restarts: int = 1, objective_max: float = None, objective_tolerance: float = 0.9995,
-                         normalize_angles: bool = True, **kwargs) -> OptimizeResult:
+def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, method: str = 'BFGS', num_restarts: int = 1, objective_max: float = None,
+                         objective_tolerance: float = 0.9995, normalize_angles: bool = True, **kwargs) -> OptimizeResult:
     """
     Wrapper around minimizer function that restarts optimization from multiple random starting points to minimize evaluator.
     :param evaluator: Evaluator instance.
     :param starting_angles: Starting point for optimization. Chosen randomly if None.
+    :param method: Optimization method.
     :param num_restarts: Number of random starting points to try. Has no effect if specific starting point is provided.
     :param objective_max: Maximum achievable objective. Optimization stops if answer sufficiently close to max_objective is achieved.
     :param objective_tolerance: Fraction of 1 that controls how close the result need to be to objective_max before optimization can be stopped.
@@ -235,10 +236,12 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, 
         else:
             next_angles = random.uniform(-np.pi, np.pi, evaluator.num_angles)
 
-        result = optimize.minimize(evaluator.func, next_angles, **kwargs)
+        result = optimize.minimize(evaluator.func, next_angles, method=method, **kwargs)
         if not result.success:
-            print(result)
-            raise Exception('Optimization failed')
+            result = optimize.minimize(evaluator.func, next_angles, method='Nelder-Mead', **kwargs)
+            if not result.success:
+                print(result)
+                raise Exception('Optimization failed')
 
         if normalize_angles:
             result.x = normalize_qaoa_angles(result.x)
