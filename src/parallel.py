@@ -321,7 +321,7 @@ class WorkerIterativePerturb(WorkerStandard):
             result[1] = normalize_qaoa_angles(convert_angles_fourier_to_qaoa(result[1]))
 
         series[self.out_col] = result[0]
-        series[self.out_col + angle_suffix] = angles_best
+        series[self.out_col + angle_suffix] = result[1]
         series[self.out_col + '_nfev'] = result[2]
         if self.initial_guess_from + '_angles_unperturbed' in series:
             series[self.out_col + '_angles_unperturbed'] = result[3]

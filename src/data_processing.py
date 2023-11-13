@@ -32,7 +32,11 @@ def collect_results_from(base_path: str, columns: list[str], aggregator: callabl
 
 
 def extract_numbers(str_arr: list[str]) -> list[int]:
-    """ Extracts numbers after _ from column names. """
+    """
+    Extracts numbers after _ from given string.
+    :param str_arr: List of strings to process.
+    :return: List of numbers after _ in the strings.
+    """
     return [int(name.split('_')[1]) for name in str_arr]
 
 
