@@ -83,31 +83,30 @@ def init_dataframe(data_path: str, worker: WorkerBaseQAOA, out_path: str):
 
 
 def run_graphs_parallel():
-    nodes = list(range(9, 10))
+    nodes = list(range(9, 13))
     depths = list(range(3, 7))
-    ps = list(range(1, 11))
+    ps = list(range(12, 14))
 
     num_workers = 20
     convergence_threshold = 0.9995
     reader = partial(nx.read_gml, destringizer=int)
 
     for p in ps:
-        out_path_suffix = 'output/qaoa/tqa/attempts_1/out.csv'
+        out_path_suffix = 'output/qaoa/constant/attempts_1/out.csv'
         out_col = f'p_{p}'
         initial_guess_from = None if p == 1 else f'p_{p - 1}'
         transfer_from = None if p == 1 else f'p_{p - 1}'
         transfer_p = None if p == 1 else p - 1
 
         # worker = WorkerStandard(reader=reader, p=p, out_col=f'r_1', initial_guess_from=None, transfer_from=None, transfer_p=None, search_space='qaoa')
-        # worker_constant = WorkerConstant(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p)
-        worker_tqa = WorkerLinear(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p, search_space='tqa')
+        worker_constant = WorkerConstant(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p)
+        # worker_tqa = WorkerLinear(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p, search_space='tqa')
         # worker_interp = WorkerInterp(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
-        # worker = WorkerFourier(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
+        # worker_fourier = WorkerFourier(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
         # worker_greedy = WorkerGreedy(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p)
-
         # worker_combined = WorkerCombined(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p,
         #                                  workers=[worker_interp, worker_greedy], restart_shares=[0.5, 0.5])
-        worker = worker_tqa
+        worker = worker_constant
 
         for node in nodes:
             node_depths = [3] if node < 12 else depths
@@ -120,7 +119,7 @@ def run_graphs_parallel():
                 # rows_func = lambda df: (df[f'p_{p}'] < convergence_threshold) & ((df[f'p_{p}_nfev'] == 1000 * p) | (df[f'p_{p}'] < df[f'p_{p - 1}']))
 
                 # mask = np.zeros((1000, 1), dtype=bool)
-                # mask[508] = True
+                # mask[1] = True
                 # rows_func = lambda df: mask
 
                 out_folder = path.split(out_path)[0]
@@ -152,7 +151,7 @@ def run_merge():
     copy_better = True
     nodes = [9]
     depths = [3, 4, 5, 6]
-    methods = ['qaoa']
+    methods = ['ma']
     ps_all = {'qaoa': list(range(1, 12)), 'ma': list(range(1, 6))}
     convergence_threshold = 0.9995
     for method in methods:
@@ -161,8 +160,9 @@ def run_merge():
             node_depths = [3] if node < 12 else depths
             for depth in node_depths:
                 base_path = f'graphs/new/nodes_{node}/depth_{depth}/output/{method}/random'
+                # restarts = [1] * len(ps)
                 restarts = ps
-                merge_dfs(base_path, ps, restarts, convergence_threshold, f'{base_path}/out_rp.csv', copy_better)
+                merge_dfs(base_path, ps, restarts, convergence_threshold, f'{base_path}/attempts_p/out.csv', copy_better)
 
 
 if __name__ == '__main__':

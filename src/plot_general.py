@@ -16,14 +16,13 @@ markers = 'oX*vs'
 
 @dataclass
 class Line:
-    """
-    Class that represents a line in a 2D plot.
-    """
+    """ Class that represents a line in a 2D plot. """
     xs: Sequence
     ys: Sequence
     color: tuple = colors[0]
     marker: str = 'o'
     style: str = 'solid'
+    label: str = '_nolabel_'
 
 
 def assign_distinct_colors(lines: list[Line]):
@@ -50,7 +49,7 @@ def plot_general(lines: list[Line], labels: tuple[str | None, str | None] = None
     plt.rcParams.update({'font.size': font_size})
 
     for line in lines:
-        plt.plot(line.xs, line.ys, color=line.color, marker=line.marker, linestyle=line.style, markersize=5)
+        plt.plot(line.xs, line.ys, color=line.color, marker=line.marker, linestyle=line.style, markersize=5, label=line.label)
 
     if labels is not None:
         if labels[0] is not None:

@@ -1,6 +1,8 @@
 """
 Contains plot functions.
 """
+from itertools import product
+
 import numpy as np
 import pandas as pd
 from matplotlib import cm, pyplot as plt
@@ -38,6 +40,71 @@ def plot_qaoa_expectation_p1(graph: Graph, edge_list: list[tuple[int, int]] = No
     fig.colorbar(surf, shrink=0.5, aspect=5)
     plt.show()
     return surf
+
+
+def plot_ar_vs_p_heuristics_qaoa_core(methods, labels, attempts):
+    lines = []
+    for method_ind, method in enumerate(methods):
+        ps, p_series = get_column_statistic(f'graphs/new/nodes_9/depth_3/output/qaoa/{method}/attempts_{attempts}/out.csv', r'p_\d+$', np.mean)
+        lines.append(Line(ps[:10], p_series[:10], colors[method_ind], style='-', label=labels[method_ind]))
+        ps, p_series = get_column_statistic(f'graphs/new/nodes_9/depth_3/output/qaoa/{method}/attempts_{attempts}/out.csv', r'p_\d+$', min)
+        lines.append(Line(ps[:10], p_series[:10], colors[method_ind], style='--'))
+
+    x_lim = [0.75, 10.25]
+    plot_general(lines, ('p', 'AR'), (1, 0.02), (*x_lim, 0.52, 1.005))
+    plt.legend(loc='lower right', fontsize='small')
+    plt.plot(x_lim, [1, 1], 'k--')
+    plt.plot(x_lim, [16/17, 16/17], 'r--')
+
+
+def plot_ar_vs_p_heuristics_qaoa_attempts_1():
+    methods = ['constant', 'tqa', 'interp', 'fourier', 'random']
+    labels = ['Constant', 'TQA', 'Interp', 'Fourier', 'Random']
+    plot_ar_vs_p_heuristics_qaoa_core(methods, labels, '1')
+    save_figure()
+    plt.show()
+
+
+def plot_ar_vs_p_heuristics_qaoa_attempts_p():
+    methods = ['greedy', 'tqa', 'interp', 'fourier', 'random']
+    labels = ['Greedy', 'TQA', 'Interp', 'Fourier', 'Random']
+    plot_ar_vs_p_heuristics_qaoa_core(methods, labels, 'p')
+    save_figure()
+    plt.show()
+
+
+def plot_ar_vs_p_core(nodes, depths, labels):
+    lines = []
+    max_p = 11
+    iterable = list(product(nodes, depths))
+    for pair_ind, pair in enumerate(iterable):
+        path = f'graphs/new/nodes_{pair[0]}/depth_{pair[1]}/output/qaoa/constant/attempts_1/out.csv'
+        ps, p_series = get_column_statistic(path, r'p_\d+$', np.mean)
+        lines.append(Line(ps[:max_p], p_series[:max_p], colors[pair_ind], style='-', label=labels[pair_ind]))
+        ps, p_series = get_column_statistic(path, r'p_\d+$', min)
+        lines.append(Line(ps[:max_p], p_series[:max_p], colors[pair_ind], style='--'))
+    plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, max_p + 0.25, None, 1.0025))
+    plt.legend(loc='lower right', fontsize='small')
+    plt.plot([0, max_p + 1], [1, 1], 'k--')
+    plt.plot([0, max_p + 1], [16/17, 16/17], 'r--')
+
+
+def plot_ar_vs_p_nodes():
+    nodes = list(range(9, 13))
+    depths = [3]
+    labels = [f'{i} nodes' for i in nodes]
+    plot_ar_vs_p_core(nodes, depths, labels)
+    save_figure()
+    plt.show()
+
+
+def plot_ar_vs_p_depths():
+    nodes = [12]
+    depths = list(range(3, 7))
+    labels = [f'Depth = {i}' for i in depths]
+    plot_ar_vs_p_core(nodes, depths, labels)
+    save_figure()
+    plt.show()
 
 
 def plot_avg_ar_vs_p_r1_nodes():
@@ -230,14 +297,15 @@ def plot_min_ar_vs_p_experimental_test():
     # methods = ['ma/explicit/out.csv', 'ma/random/qaoa/out.csv', 'ma/random/ma/out_r1.csv', 'gen1/out.csv', 'gen12e/out.csv', 'xqaoa/random/out.csv', 'xqaoa/explicit/out.csv']
     # labels = ['Optimal QAOA -> MA', 'Random QAOA -> MA', 'Random MA', 'Generalized 1', 'Generalized 2(e)', 'Random XQAOA', 'Optimal QAOA -> XQAOA']
 
-    methods = ['qaoa/random/out_r1.csv', 'qaoa/greedy/out.csv', 'qaoa/interp/out.csv', 'qaoa/fourier/out.csv', 'qaoa/tqa/out.csv', 'qaoa/combined/out.csv', 'qaoa/constant/out.csv']
-    labels = ['Random', 'Greedy', 'Interp', 'Fourier', 'TQA', 'Combined', 'Constant']
+    methods = ['random', 'interp', 'fourier', 'tqa', 'constant']
+    # methods = ['qaoa/random/out_r1.csv', 'qaoa/greedy/out.csv', 'qaoa/interp/attempts_1/out.csv', 'qaoa/fourier/out.csv', 'qaoa/tqa/attempts_1/out.csv', 'qaoa/constant/out.csv']
+    labels = ['Random', 'Interp', 'Fourier', 'TQA', 'Constant']
 
     nodes = range(9, 10)
     lines = []
     for method_ind, method in enumerate(methods):
         for n_ind, n in enumerate(nodes):
-            ps, p_series = get_column_statistic(f'graphs/new/nodes_{n}/depth_3/output/{method}', r'p_\d+$', min)
+            ps, p_series = get_column_statistic(f'graphs/new/nodes_{n}/depth_3/output/qaoa/{method}/attempts_1/out.csv', r'p_\d+$', min)
             lines.append(Line(ps, p_series, colors[method_ind]))
 
     x_lim = [0.75, 10.25]
@@ -480,18 +548,17 @@ def plot_converged_fraction_vs_rel_p_r10_edges():
 
 
 if __name__ == "__main__":
-    # plot_avg_ar_vs_p_r1_nodes()
-    # plot_avg_ar_vs_p_r1_edges()
-    # plot_avg_ar_vs_p_r1_interp_nodes()
-    # plot_avg_ar_vs_p_r1_interp_edges()
-    # plot_avg_ar_vs_p_interp_ma()
+    # plot_ar_vs_p_heuristics_qaoa_attempts_1()
+    # plot_ar_vs_p_heuristics_qaoa_attempts_p()
+    # plot_ar_vs_p_nodes()
+    plot_ar_vs_p_depths()
 
     # plot_avg_ar_vs_p_interp_nodes()
     # plot_avg_ar_vs_p_interp_edges()
     # plot_min_ar_vs_p_nodes()
     # plot_min_ar_vs_p_interp_edges()
     # plot_avg_ar_vs_p_experimental_test()
-    plot_min_ar_vs_p_experimental_test()
+    # plot_min_ar_vs_p_experimental_test()
     # plot_avg_ar_vs_cost_interp_nodes()
     # plot_avg_ar_vs_cost_interp_edges()
     # plot_interp_random_ar_difference_vs_p_nodes()
