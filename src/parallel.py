@@ -152,6 +152,10 @@ class WorkerGeneralSub(WorkerGeneral):
 class WorkerStandard(WorkerBaseQAOA):
     """ Implements standard processing with plain or random starting angles. """
 
+    def provide_guess(self):
+        """ Provides guess for the starting angles. """
+        raise Exception('Unimplemented')
+
     def process_entry_core(self, path: str, search_space: str = None, **optimize_args) -> tuple:
         """
         Processes entry with plain input and output arguments.
@@ -191,11 +195,15 @@ class WorkerConstant(WorkerStandard):
     def __post_init__(self):
         self.search_space = 'qaoa'
 
-    def process_entry(self, entry: tuple[str, Series]) -> Series:
-        path, series = entry
+    def provide_guess(self):
         gammas = [-0.01] * self.p
         betas = [0.01] * self.p
         starting_angles = np.array(list(it.chain(*zip(gammas, betas))))
+        return starting_angles
+
+    def process_entry(self, entry: tuple[str, Series]) -> Series:
+        path, series = entry
+        starting_angles = self.provide_guess()
         ar, angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=starting_angles)
         series[self.out_col] = ar
         series[self.out_col + '_angles'] = angles
@@ -464,6 +472,7 @@ class WorkerMA(WorkerStandard):
     :var guess_format: Name of format of starting point (ma or qaoa).
     """
     search_space: str = field(init=False)
+    guess_provider: WorkerStandard = None
     guess_format: str
 
     def __post_init__(self):
@@ -473,12 +482,17 @@ class WorkerMA(WorkerStandard):
 
     def process_entry(self, entry: tuple[str, Series]) -> Series:
         path, series = entry
-        starting_angles = None if self.initial_guess_from is None else numpy_str_to_array(series[self.initial_guess_from + '_angles'])
-        graph = self.reader(path)
+        if self.guess_provider is not None:
+            starting_angles = self.guess_provider.provide_guess()
+        else:
+            starting_angles = None if self.initial_guess_from is None else numpy_str_to_array(series[self.initial_guess_from + '_angles'])
+
         if self.guess_format == 'qaoa':
             if starting_angles is None:
                 starting_angles = random.uniform(-np.pi, np.pi, 2 * self.p)
+            graph = self.reader(path)
             starting_angles = convert_angles_qaoa_to_ma(starting_angles, len(graph.edges), len(graph))
+
         ar, angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=starting_angles)
         series[self.out_col] = ar
         series[self.out_col + '_angles'] = angles

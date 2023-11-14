@@ -42,16 +42,16 @@ def plot_qaoa_expectation_p1(graph: Graph, edge_list: list[tuple[int, int]] = No
     return surf
 
 
-def plot_ar_vs_p_heuristics_qaoa_core(methods, labels, attempts):
+def plot_ar_vs_p_heuristics_core(search_space: str, methods: list[str], labels: list[str], attempts: str, min_y: float, max_p: int):
     lines = []
     for method_ind, method in enumerate(methods):
-        ps, p_series = get_column_statistic(f'graphs/new/nodes_9/depth_3/output/qaoa/{method}/attempts_{attempts}/out.csv', r'p_\d+$', np.mean)
-        lines.append(Line(ps[:10], p_series[:10], colors[method_ind], style='-', label=labels[method_ind]))
-        ps, p_series = get_column_statistic(f'graphs/new/nodes_9/depth_3/output/qaoa/{method}/attempts_{attempts}/out.csv', r'p_\d+$', min)
-        lines.append(Line(ps[:10], p_series[:10], colors[method_ind], style='--'))
+        ps, p_series = get_column_statistic(f'graphs/new/nodes_9/depth_3/output/{search_space}/{method}/attempts_{attempts}/out.csv', r'p_\d+$', np.mean)
+        lines.append(Line(ps[:max_p], p_series[:max_p], colors[method_ind], style='-', label=labels[method_ind]))
+        ps, p_series = get_column_statistic(f'graphs/new/nodes_9/depth_3/output/{search_space}/{method}/attempts_{attempts}/out.csv', r'p_\d+$', min)
+        lines.append(Line(ps[:max_p], p_series[:max_p], colors[method_ind], style='--'))
 
-    x_lim = [0.75, 10.25]
-    plot_general(lines, ('p', 'AR'), (1, 0.02), (*x_lim, 0.52, 1.005))
+    x_lim = [0.75, max_p + 0.25]
+    plot_general(lines, ('p', 'AR'), (1, 0.02), (*x_lim, min_y, 1.005))
     plt.legend(loc='lower right', fontsize='small')
     plt.plot(x_lim, [1, 1], 'k--')
     plt.plot(x_lim, [16/17, 16/17], 'r--')
@@ -60,7 +60,7 @@ def plot_ar_vs_p_heuristics_qaoa_core(methods, labels, attempts):
 def plot_ar_vs_p_heuristics_qaoa_attempts_1():
     methods = ['constant', 'tqa', 'interp', 'fourier', 'random']
     labels = ['Constant', 'TQA', 'Interp', 'Fourier', 'Random']
-    plot_ar_vs_p_heuristics_qaoa_core(methods, labels, '1')
+    plot_ar_vs_p_heuristics_core('qaoa', methods, labels, '1', 0.52, 10)
     save_figure()
     plt.show()
 
@@ -68,14 +68,22 @@ def plot_ar_vs_p_heuristics_qaoa_attempts_1():
 def plot_ar_vs_p_heuristics_qaoa_attempts_p():
     methods = ['greedy', 'tqa', 'interp', 'fourier', 'random']
     labels = ['Greedy', 'TQA', 'Interp', 'Fourier', 'Random']
-    plot_ar_vs_p_heuristics_qaoa_core(methods, labels, 'p')
+    plot_ar_vs_p_heuristics_core('qaoa', methods, labels, 'p', 0.52, 10)
+    save_figure()
+    plt.show()
+
+
+def plot_ar_vs_p_heuristics_ma_attempts_1():
+    methods = ['constant', 'qaoa_relax', 'random_qaoa', 'random']
+    labels = ['Constant', 'QAOA Relax', 'Random QAOA', 'Random']
+    plot_ar_vs_p_heuristics_core('ma', methods, labels, '1', 0.72, 4)
     save_figure()
     plt.show()
 
 
 def plot_ar_vs_p_core(nodes, depths, labels):
     lines = []
-    max_p = 11
+    max_p = 13
     iterable = list(product(nodes, depths))
     for pair_ind, pair in enumerate(iterable):
         path = f'graphs/new/nodes_{pair[0]}/depth_{pair[1]}/output/qaoa/constant/attempts_1/out.csv'
@@ -550,8 +558,9 @@ def plot_converged_fraction_vs_rel_p_r10_edges():
 if __name__ == "__main__":
     # plot_ar_vs_p_heuristics_qaoa_attempts_1()
     # plot_ar_vs_p_heuristics_qaoa_attempts_p()
+    plot_ar_vs_p_heuristics_ma_attempts_1()
     # plot_ar_vs_p_nodes()
-    plot_ar_vs_p_depths()
+    # plot_ar_vs_p_depths()
 
     # plot_avg_ar_vs_p_interp_nodes()
     # plot_avg_ar_vs_p_interp_edges()

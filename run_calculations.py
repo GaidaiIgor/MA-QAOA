@@ -83,16 +83,16 @@ def init_dataframe(data_path: str, worker: WorkerBaseQAOA, out_path: str):
 
 
 def run_graphs_parallel():
-    nodes = list(range(9, 13))
+    nodes = list(range(10, 13))
     depths = list(range(3, 7))
-    ps = list(range(12, 14))
+    ps = list(range(2, 5))
 
     num_workers = 20
     convergence_threshold = 0.9995
     reader = partial(nx.read_gml, destringizer=int)
 
     for p in ps:
-        out_path_suffix = 'output/qaoa/constant/attempts_1/out.csv'
+        out_path_suffix = 'output/ma/constant/attempts_1/out.csv'
         out_col = f'p_{p}'
         initial_guess_from = None if p == 1 else f'p_{p - 1}'
         transfer_from = None if p == 1 else f'p_{p - 1}'
@@ -106,7 +106,9 @@ def run_graphs_parallel():
         # worker_greedy = WorkerGreedy(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p)
         # worker_combined = WorkerCombined(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p,
         #                                  workers=[worker_interp, worker_greedy], restart_shares=[0.5, 0.5])
-        worker = worker_constant
+        worker_ma = WorkerMA(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p, guess_provider=worker_constant,
+                             guess_format='qaoa')
+        worker = worker_ma
 
         for node in nodes:
             node_depths = [3] if node < 12 else depths
