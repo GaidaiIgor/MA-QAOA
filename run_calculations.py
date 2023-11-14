@@ -66,8 +66,8 @@ def init_dataframe(data_path: str, worker: WorkerBaseQAOA, out_path: str):
     if worker.initial_guess_from is None:
         paths = [f'{data_path}/{i}.gml' for i in range(1000)]
         df = DataFrame(paths).set_axis(['path'], axis=1).set_index('path')
-    elif isinstance(worker, (WorkerInterp, WorkerFourier, WorkerGreedy, WorkerCombined)):
-        df = pd.read_csv(f'{data_path}/output/qaoa/random/p_1/out.csv', index_col=0)
+    elif isinstance(worker, (WorkerInterp, WorkerFourier, WorkerGreedy, WorkerCombined)) or hasattr(worker, 'guess_provider') and isinstance(worker.guess_provider, WorkerInterp):
+        df = pd.read_csv(f'{data_path}/output/{worker.search_space}/random/p_1/out.csv', index_col=0)
         prev_nfev = df.filter(regex=r'r_\d_nfev').sum(axis=1).astype(int)
         df = df.filter(regex='r_10').rename(columns=lambda name: f'p_1{name[4:]}')
         df['p_1_nfev'] += prev_nfev
@@ -83,31 +83,31 @@ def init_dataframe(data_path: str, worker: WorkerBaseQAOA, out_path: str):
 
 
 def run_graphs_parallel():
-    nodes = list(range(10, 13))
+    nodes = list(range(9, 10))
     depths = list(range(3, 7))
-    ps = list(range(2, 5))
+    ps = list(range(2, 3))
 
-    num_workers = 20
+    num_workers = 1
     convergence_threshold = 0.9995
     reader = partial(nx.read_gml, destringizer=int)
 
     for p in ps:
-        out_path_suffix = 'output/ma/constant/attempts_1/out.csv'
+        out_path_suffix = 'output/ma/interp/attempts_1/out.csv'
         out_col = f'p_{p}'
         initial_guess_from = None if p == 1 else f'p_{p - 1}'
         transfer_from = None if p == 1 else f'p_{p - 1}'
         transfer_p = None if p == 1 else p - 1
 
         # worker = WorkerStandard(reader=reader, p=p, out_col=f'r_1', initial_guess_from=None, transfer_from=None, transfer_p=None, search_space='qaoa')
-        worker_constant = WorkerConstant(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p)
+        # worker_constant = WorkerConstant(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p)
         # worker_tqa = WorkerLinear(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p, search_space='tqa')
-        # worker_interp = WorkerInterp(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
+        worker_interp = WorkerInterp(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
         # worker_fourier = WorkerFourier(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
         # worker_greedy = WorkerGreedy(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p)
         # worker_combined = WorkerCombined(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p,
         #                                  workers=[worker_interp, worker_greedy], restart_shares=[0.5, 0.5])
-        worker_ma = WorkerMA(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p, guess_provider=worker_constant,
-                             guess_format='qaoa')
+        worker_ma = WorkerMA(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p,
+                             guess_provider=worker_interp, guess_format='ma')
         worker = worker_ma
 
         for node in nodes:
@@ -120,9 +120,9 @@ def run_graphs_parallel():
                 # rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)
                 # rows_func = lambda df: (df[f'p_{p}'] < convergence_threshold) & ((df[f'p_{p}_nfev'] == 1000 * p) | (df[f'p_{p}'] < df[f'p_{p - 1}']))
 
-                # mask = np.zeros((1000, 1), dtype=bool)
-                # mask[1] = True
-                # rows_func = lambda df: mask
+                mask = np.zeros((1000, 1), dtype=bool)
+                mask[[14, 16]] = True
+                rows_func = lambda df: mask
 
                 out_folder = path.split(out_path)[0]
                 if not path.exists(out_folder):

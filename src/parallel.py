@@ -152,7 +152,7 @@ class WorkerGeneralSub(WorkerGeneral):
 class WorkerStandard(WorkerBaseQAOA):
     """ Implements standard processing with plain or random starting angles. """
 
-    def provide_guess(self):
+    def provide_guess(self, *args, **kwargs):
         """ Provides guess for the starting angles. """
         raise Exception('Unimplemented')
 
@@ -195,7 +195,7 @@ class WorkerConstant(WorkerStandard):
     def __post_init__(self):
         self.search_space = 'qaoa'
 
-    def provide_guess(self):
+    def provide_guess(self, **kwargs):
         gammas = [-0.01] * self.p
         betas = [0.01] * self.p
         starting_angles = np.array(list(it.chain(*zip(gammas, betas))))
@@ -269,14 +269,6 @@ class WorkerIterativePerturb(WorkerStandard):
         if self.p < 2:
             raise Exception('p has to be > 1 for iterative workers')
 
-    def extend_angles(self, angles: ndarray) -> ndarray:
-        """
-        Extends given angles to generate the guess for the next layer. Must be defined by a child.
-        :param angles: Set of angles.
-        :return: Extended set of angles that serves as a guess for the next layer.
-        """
-        raise Exception('This method is not implemented in the base class. Use the derived classes.')
-
     def process_entry_core(self, path: str, starting_angles: ndarray, angles_unperturbed: ndarray = None, num_attempts: int = None) -> list:
         """
         Core functionality of process_entry with plain input and output arguments instead of a series.
@@ -297,7 +289,7 @@ class WorkerIterativePerturb(WorkerStandard):
             if i >= perturbations_start:
                 perturbation = self.alpha * random.normal(scale=abs(next_starting_angles))
                 next_starting_angles += perturbation
-            next_starting_angles = self.extend_angles(next_starting_angles)
+            next_starting_angles = self.provide_guess(next_starting_angles)
             result = WorkerStandard.process_entry_core(self, path, starting_angles=next_starting_angles, normalize_angles=normalize_angles)
             optimization_results.append(result)
 
@@ -352,7 +344,7 @@ class WorkerInterp(WorkerIterativePerturb):
         super().__post_init__()
         self.search_space = 'qaoa'
 
-    def extend_angles(self, angles: ndarray) -> ndarray:
+    def provide_guess(self, angles: ndarray) -> ndarray:
         return interp_qaoa_angles(angles, self.p - 1)
 
 
@@ -365,7 +357,7 @@ class WorkerFourier(WorkerIterativePerturb):
         super().__post_init__()
         self.search_space = 'fourier'
 
-    def extend_angles(self, angles: ndarray) -> ndarray:
+    def provide_guess(self, angles: ndarray) -> ndarray:
         return np.concatenate((angles, [0] * 2))
 
 
@@ -482,10 +474,9 @@ class WorkerMA(WorkerStandard):
 
     def process_entry(self, entry: tuple[str, Series]) -> Series:
         path, series = entry
+        starting_angles = None if self.initial_guess_from is None else numpy_str_to_array(series[self.initial_guess_from + '_angles'])
         if self.guess_provider is not None:
-            starting_angles = self.guess_provider.provide_guess()
-        else:
-            starting_angles = None if self.initial_guess_from is None else numpy_str_to_array(series[self.initial_guess_from + '_angles'])
+            starting_angles = self.guess_provider.provide_guess(angles=starting_angles)
 
         if self.guess_format == 'qaoa':
             if starting_angles is None:
