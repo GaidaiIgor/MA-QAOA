@@ -174,8 +174,7 @@ def transfer_expectation_columns(df: DataFrame, transfer_from: str, transfer_to:
             df.loc[transfer_rows, transfer_angles_to] = df.loc[transfer_rows, transfer_angles_from]
         else:
             original_angles = df.loc[transfer_rows, transfer_angles_from].apply(lambda x: numpy_str_to_array(x))
-            angles_per_layer = len(original_angles[0]) // p_from
-            transformed_angles = [str(np.concatenate((angles, [0] * angles_per_layer * (p_to - p_from)))) for angles in original_angles]
+            transformed_angles = [str(np.concatenate((angles, [0] * (len(angles) // p_from) * (p_to - p_from)))) for angles in original_angles]
             df.loc[transfer_rows, transfer_angles_to] = transformed_angles
 
     df.loc[transfer_rows, transfer_to] = df.loc[transfer_rows, transfer_from]
