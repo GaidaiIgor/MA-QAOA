@@ -74,27 +74,31 @@ def plot_ar_vs_p_heuristics_qaoa_attempts_p():
 
 
 def plot_ar_vs_p_heuristics_ma_attempts_1():
-    methods = ['constant', 'qaoa_relax', 'random_qaoa', 'random']
-    labels = ['Constant', 'QAOA Relax', 'Random QAOA', 'Random']
-    plot_ar_vs_p_heuristics_core('ma', methods, labels, '1', 0.72, 4)
+    methods = ['constant', 'interp', 'qaoa_relax/constant', 'random_qaoa', 'random']
+    labels = ['Constant', 'Interp', 'QAOA Relax', 'Random QAOA', 'Random']
+    plot_ar_vs_p_heuristics_core('ma', methods, labels, '1', 0.72, 3)
     save_figure()
     plt.show()
 
 
-def plot_ar_vs_p_core(nodes, depths, labels):
+def plot_ar_vs_p_core(nodes: list[int], depths: list[int], labels: list[str]):
+    max_ps = [13, 5]
+    search_spaces = ['qaoa', 'ma']
     lines = []
-    max_p = 13
     iterable = list(product(nodes, depths))
-    for pair_ind, pair in enumerate(iterable):
-        path = f'graphs/new/nodes_{pair[0]}/depth_{pair[1]}/output/qaoa/constant/attempts_1/out.csv'
-        ps, p_series = get_column_statistic(path, r'p_\d+$', np.mean)
-        lines.append(Line(ps[:max_p], p_series[:max_p], colors[pair_ind], style='-', label=labels[pair_ind]))
-        ps, p_series = get_column_statistic(path, r'p_\d+$', min)
-        lines.append(Line(ps[:max_p], p_series[:max_p], colors[pair_ind], style='--'))
-    plot_general(lines, ('p', 'Average AR'), (1, 0.02), (0.75, max_p + 0.25, None, 1.0025))
+    for search_space_ind, search_space in enumerate(search_spaces):
+        max_p = max_ps[search_space_ind]
+        for pair_ind, pair in enumerate(iterable):
+            path = f'graphs/new/nodes_{pair[0]}/depth_{pair[1]}/output/{search_space}/constant/attempts_1/out.csv'
+            ps, p_series = get_column_statistic(path, r'p_\d+$', np.mean)
+            label = None if search_space_ind > 0 else labels[pair_ind]
+            lines.append(Line(ps[:max_p], p_series[:max_p], colors[pair_ind], style='-', marker=search_space_ind, label=label))
+            ps, p_series = get_column_statistic(path, r'p_\d+$', min)
+            lines.append(Line(ps[:max_p], p_series[:max_p], colors[pair_ind], style='--', marker=search_space_ind))
+    plot_general(lines, ('p', 'AR'), (1, 0.02), (0.75, max_ps[0] + 0.25, None, 1.0025))
     plt.legend(loc='lower right', fontsize='small')
-    plt.plot([0, max_p + 1], [1, 1], 'k--')
-    plt.plot([0, max_p + 1], [16/17, 16/17], 'r--')
+    plt.plot([0, max_ps[0] + 1], [1, 1], 'k--')
+    plt.plot([0, max_ps[0] + 1], [16/17, 16/17], 'r--')
 
 
 def plot_ar_vs_p_nodes():
@@ -558,8 +562,8 @@ def plot_converged_fraction_vs_rel_p_r10_edges():
 if __name__ == "__main__":
     # plot_ar_vs_p_heuristics_qaoa_attempts_1()
     # plot_ar_vs_p_heuristics_qaoa_attempts_p()
-    plot_ar_vs_p_heuristics_ma_attempts_1()
-    # plot_ar_vs_p_nodes()
+    # plot_ar_vs_p_heuristics_ma_attempts_1()
+    plot_ar_vs_p_nodes()
     # plot_ar_vs_p_depths()
 
     # plot_avg_ar_vs_p_interp_nodes()

@@ -208,7 +208,7 @@ def change_sign(func: callable) -> callable:
     return func_changed_sign
 
 
-def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, method: str = 'BFGS', num_restarts: int = 1, objective_max: float = None,
+def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, method: str = 'L-BFGS-B', num_restarts: int = 1, objective_max: float = None,
                          objective_tolerance: float = 0.9995, normalize_angles: bool = True, **kwargs) -> OptimizeResult:
     """
     Wrapper around minimizer function that restarts optimization from multiple random starting points to minimize evaluator.
@@ -238,6 +238,7 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, 
 
         result = optimize.minimize(evaluator.func, next_angles, method=method, **kwargs)
         if not result.success:
+            print(result.message)
             result = optimize.minimize(evaluator.func, next_angles, method='Nelder-Mead', **kwargs)
             if not result.success:
                 print(result)

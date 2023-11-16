@@ -11,7 +11,8 @@ from matplotlib.ticker import MultipleLocator
 
 colors = [(0, 0, 1), (1, 0, 0), (0, 0.5, 0), (0, 0, 0), (0, 0.75, 0.75), (0.75, 0, 0.75), (0.75, 0.75, 0)]
 colors += distinctipy.get_colors(10, colors + [(1, 1, 1)])
-markers = 'oX*vs'
+markers = 'o*Xvs'
+marker_sizes = {'o': 5, '*': 8, 'X': 5, 'v': 5, 's': 5}
 
 
 @dataclass
@@ -23,6 +24,10 @@ class Line:
     marker: str = 'o'
     style: str = 'solid'
     label: str = '_nolabel_'
+
+    def __post_init__(self):
+        if isinstance(self.marker, int):
+            self.marker = markers[self.marker]
 
 
 def assign_distinct_colors(lines: list[Line]):
@@ -49,7 +54,7 @@ def plot_general(lines: list[Line], labels: tuple[str | None, str | None] = None
     plt.rcParams.update({'font.size': font_size})
 
     for line in lines:
-        plt.plot(line.xs, line.ys, color=line.color, marker=line.marker, linestyle=line.style, markersize=5, label=line.label)
+        plt.plot(line.xs, line.ys, color=line.color, marker=line.marker, linestyle=line.style, markersize=marker_sizes[line.marker], label=line.label)
 
     if labels is not None:
         if labels[0] is not None:

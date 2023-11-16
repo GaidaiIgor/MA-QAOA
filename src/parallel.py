@@ -189,15 +189,15 @@ class WorkerStandard(WorkerBaseQAOA):
 
 @dataclass(kw_only=True)
 class WorkerConstant(WorkerStandard):
-    """ Worker that tries to start from all gamma = -0.01, all beta = 0.01. """
+    """ Worker that tries to start from constant values with opposite signs for gamma and beta. """
     search_space: str = field(init=False)
 
     def __post_init__(self):
         self.search_space = 'qaoa'
 
     def provide_guess(self, **kwargs):
-        gammas = [-0.01] * self.p
-        betas = [0.01] * self.p
+        gammas = [0.1] * self.p
+        betas = [-0.1] * self.p
         starting_angles = np.array(list(it.chain(*zip(gammas, betas))))
         return starting_angles
 
@@ -464,7 +464,7 @@ class WorkerMA(WorkerStandard):
     :var guess_format: Name of format of starting point (ma or qaoa).
     """
     search_space: str = field(init=False)
-    guess_provider: WorkerStandard = None
+    guess_provider: WorkerStandard | None = None
     guess_format: str
 
     def __post_init__(self):
