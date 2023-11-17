@@ -169,7 +169,8 @@ class WorkerStandard(WorkerBaseQAOA):
 
         graph = self.reader(path)
         evaluator = Evaluator.get_evaluator_standard_maxcut(graph, self.p, search_space=search_space)
-        options = {'maxiter': np.iinfo(np.int32).max}
+        maxint = np.iinfo(np.int32).max
+        options = {'maxiter': maxint, 'maxfun': maxint}
 
         try:
             result = optimize_qaoa_angles(evaluator, options=options, **optimize_args)
@@ -196,8 +197,8 @@ class WorkerConstant(WorkerStandard):
         self.search_space = 'qaoa'
 
     def provide_guess(self, **kwargs):
-        gammas = [0.1] * self.p
-        betas = [-0.1] * self.p
+        gammas = [0.2] * self.p
+        betas = [-0.2] * self.p
         starting_angles = np.array(list(it.chain(*zip(gammas, betas))))
         return starting_angles
 
@@ -537,4 +538,4 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
 
     dataset_id = re.search(r'nodes_\d+/depth_\d+', dataframe_path)[0]
     print(f'dataset: {dataset_id}; p: {worker.p}; mean: {np.mean(df[worker.out_col]):.3f}; min: {min(df[worker.out_col]):.3f}; converged: {sum(df[worker.out_col] > 0.9995)}; '
-          f'nfev: {np.mean(df[worker.out_col + "_nfev"]):.0f}\n')
+          f'nfev: {np.mean(df[worker.out_col + "_nfev"].where(lambda x: x != 0)):.0f}\n')

@@ -42,12 +42,12 @@ def plot_qaoa_expectation_p1(graph: Graph, edge_list: list[tuple[int, int]] = No
     return surf
 
 
-def plot_ar_vs_p_heuristics_core(search_space: str, methods: list[str], labels: list[str], attempts: str, min_y: float, max_p: int):
+def plot_ar_vs_p_heuristics_core(methods: list[str], labels: list[str], min_y: float, max_p: int):
     lines = []
     for method_ind, method in enumerate(methods):
-        ps, p_series = get_column_statistic(f'graphs/new/nodes_9/depth_3/output/{search_space}/{method}/attempts_{attempts}/out.csv', r'p_\d+$', np.mean)
+        ps, p_series = get_column_statistic(f'graphs/new/nodes_9/depth_3/output/{method}/out.csv', r'p_\d+$', np.mean)
         lines.append(Line(ps[:max_p], p_series[:max_p], colors[method_ind], style='-', label=labels[method_ind]))
-        ps, p_series = get_column_statistic(f'graphs/new/nodes_9/depth_3/output/{search_space}/{method}/attempts_{attempts}/out.csv', r'p_\d+$', min)
+        ps, p_series = get_column_statistic(f'graphs/new/nodes_9/depth_3/output/{method}/out.csv', r'p_\d+$', min)
         lines.append(Line(ps[:max_p], p_series[:max_p], colors[method_ind], style='--'))
 
     x_lim = [0.75, max_p + 0.25]
@@ -58,9 +58,10 @@ def plot_ar_vs_p_heuristics_core(search_space: str, methods: list[str], labels: 
 
 
 def plot_ar_vs_p_heuristics_qaoa_attempts_1():
-    methods = ['constant', 'tqa', 'interp', 'fourier', 'random']
-    labels = ['Constant', 'TQA', 'Interp', 'Fourier', 'Random']
-    plot_ar_vs_p_heuristics_core('qaoa', methods, labels, '1', 0.52, 10)
+    methods = ['constant/0.01', 'tqa/attempts_1', 'interp/attempts_1', 'fourier/attempts_1', 'random/attempts_1', 'constant/0.1/L-BFGS-B']
+    methods = ['qaoa/' + method for method in methods]
+    labels = ['Constant 0.01', 'TQA', 'Interp', 'Fourier', 'Random', 'Constant 0.1']
+    plot_ar_vs_p_heuristics_core(methods, labels, 0.52, 10)
     save_figure()
     plt.show()
 
@@ -560,10 +561,10 @@ def plot_converged_fraction_vs_rel_p_r10_edges():
 
 
 if __name__ == "__main__":
-    # plot_ar_vs_p_heuristics_qaoa_attempts_1()
+    plot_ar_vs_p_heuristics_qaoa_attempts_1()
     # plot_ar_vs_p_heuristics_qaoa_attempts_p()
     # plot_ar_vs_p_heuristics_ma_attempts_1()
-    plot_ar_vs_p_nodes()
+    # plot_ar_vs_p_nodes()
     # plot_ar_vs_p_depths()
 
     # plot_avg_ar_vs_p_interp_nodes()
