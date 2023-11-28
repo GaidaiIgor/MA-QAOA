@@ -12,7 +12,8 @@ from matplotlib.ticker import MultipleLocator
 colors = [(0, 0, 1), (1, 0, 0), (0, 0.5, 0), (0, 0, 0), (0, 0.75, 0.75), (0.75, 0, 0.75), (0.75, 0.75, 0)]
 colors += distinctipy.get_colors(10, colors + [(1, 1, 1)])
 markers = 'o*Xvs'
-marker_sizes = {'o': 5, '*': 8, 'X': 5, 'v': 5, 's': 5}
+marker_sizes = {'o': 5, '*': 8, 'X': 5, 'v': 5, 's': 5, 'none': 0}
+styles = ['-', '--']
 
 
 @dataclass
@@ -20,14 +21,18 @@ class Line:
     """ Class that represents a line in a 2D plot. """
     xs: Sequence
     ys: Sequence
-    color: tuple = colors[0]
+    color: tuple | int = colors[0]
     marker: str = 'o'
-    style: str = 'solid'
+    style: str = '-'
     label: str = '_nolabel_'
 
     def __post_init__(self):
+        if isinstance(self.color, int):
+            self.color = colors[self.color]
         if isinstance(self.marker, int):
             self.marker = markers[self.marker]
+        if isinstance(self.style, int):
+            self.style = styles[self.style]
 
 
 def assign_distinct_colors(lines: list[Line]):

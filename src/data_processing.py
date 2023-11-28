@@ -1,7 +1,8 @@
-import glob
+"""
+Functions related to data processing.
+"""
+
 import re
-from math import copysign
-from pathlib import Path
 from typing import Sequence
 
 import networkx as nx
@@ -13,24 +14,6 @@ from pandas import DataFrame
 from src.graph_utils import get_edge_diameter
 
 
-def collect_results_from(base_path: str, columns: list[str], aggregator: callable) -> DataFrame:
-    """
-    Collects results from multiple dataframes.
-    :param base_path: Path to folder with dataframes.
-    :param columns: List of columns that should be taken from each dataframe.
-    :param aggregator: Aggregator function that will be applied to each column of the input dataframes.
-    :return: Aggregated dataframe, where each input dataframe is reduced to a row in the output dataframe.
-    """
-    paths = glob.glob(f'{base_path}/*.csv')
-    stat = []
-    for path in paths:
-        df = pd.read_csv(path)
-        stat.append(aggregator(df[columns], axis=0))
-    index_keys = [Path(path).parts[-1] for path in paths]
-    summary_df = DataFrame(stat, columns=columns, index=index_keys)
-    return summary_df
-
-
 def extract_numbers(str_arr: list[str]) -> list[int]:
     """
     Extracts numbers after _ from given string.
@@ -40,19 +23,19 @@ def extract_numbers(str_arr: list[str]) -> list[int]:
     return [int(name.split('_')[1]) for name in str_arr]
 
 
-def get_column_statistic(df_path: str, col_regex: str, aggregator: callable = np.mean) -> tuple[list, list]:
+def exponential_form(ps, c1, c2):
     """
-    Returns average value of columns whose name matches specified regular expression and column header values.
-    :param df_path: Path to dataframe.
-    :param col_regex: Regular expression for column names.
-    :param aggregator: Function that accepts a column from dataframe and returns aggregated object, e.g. a number.
-    :return: 1) List of column header values. 2) List of corresponding column statistic.
+    Fitting funtion for AR vs p data.
+    :param ps: Values of p.
+    :param c1: Fitting coefficient.
+    :param c2: Fitting coefficient.
+    :return: Fitted value.
     """
-    df = pd.read_csv(df_path, index_col=0)
-    df = df.filter(regex=col_regex)
-    header_values = extract_numbers(df.columns)
-    stats = [aggregator(df[col]) for col in df.columns]
-    return header_values, stats
+    return 1 - c1 * np.exp(-c2 * ps)
+
+
+def linear_function(ps, c1, c2):
+    return c1 + c2 * ps
 
 
 def calculate_edge_diameter(df: DataFrame):
@@ -284,3 +267,52 @@ class DiscreteSineTransform(DiscreteTransform):
 
 class DiscreteCosineTransform(DiscreteTransform):
     func: callable = np.cos
+
+
+class DataExtractor:
+    """ Class that defines data extraction (rearrangement) methods. """
+
+    def __init__(self, df_path: str):
+        self.df = pd.read_csv(df_path, index_col=0)
+
+    def get_ps(self) -> list:
+        """
+        Returns the values of computed p in this dataset.
+        :return: p values.
+        """
+        ps = [int(col.split('_')[1]) for col in self.df.columns if re.match(r'p_\d+$', col)]
+        return ps
+
+    def get_ar_aggregated(self, aggregator: callable) -> Sequence:
+        """
+        Applies given aggregator to AR columns.
+        :param aggregator: Aggregator function.
+        :return: Aggregated result.
+        """
+        return self.df.filter(regex= r'p_\d+$').apply(aggregator)
+
+    def get_cost_all(self) -> DataFrame:
+        """
+        Returns total cost for each graph.
+        :return: Total cost for each graph.
+        """
+        ps = self.get_ps()
+        return self.df.filter(regex=r'p_\d+_nfev$').cumsum(axis=1) * ps
+
+    def get_cost_average(self) -> Sequence:
+        """
+        Returns average cost for each p.
+        :return: Average cost for each p.
+        """
+        costs_all = self.get_cost_all()
+        return costs_all.mean()
+
+    def get_cost_worst_case(self) -> Sequence:
+        """
+        Returns cost for the worst case graphs.
+        :return: Cost for the worst case graphs.
+        """
+        costs_all = self.get_cost_all()
+        min_inds = self.get_ar_aggregated(np.argmin)
+        costs_worst_case = [costs_all.iloc[min_inds[col_ind], col_ind] for col_ind in range(costs_all.shape[1])]
+        return costs_worst_case

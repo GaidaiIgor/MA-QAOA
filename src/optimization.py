@@ -10,7 +10,7 @@ from typing import Callable
 
 import numpy as np
 import numpy.random as random
-import scipy.optimize as optimize
+from scipy import optimize
 from networkx import Graph
 from numpy import ndarray
 from scipy.optimize import OptimizeResult

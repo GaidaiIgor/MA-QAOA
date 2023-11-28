@@ -7,18 +7,10 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
-from src.angle_strategies import convert_angles_qaoa_to_fourier
-from src.data_processing import collect_results_from, merge_dfs, numpy_str_to_array
+from src.data_processing import merge_dfs, numpy_str_to_array
 from src.graph_utils import get_max_edge_depth, is_isomorphic
 from src.parallel import optimize_expectation_parallel, WorkerFourier, WorkerStandard, WorkerBaseQAOA, WorkerInterp, WorkerGreedy, WorkerMA, WorkerLinear, WorkerCombined, \
     WorkerConstant
-
-
-def collect_results_xqaoa():
-    aggregator = np.mean
-    df_gqaoa = collect_results_from('graphs/xqaoa/output', ['GQAOA'], aggregator)
-    df_xqaoa = collect_results_from('simulation_data', ['XQAOA', 'Geomans_Williamson'], aggregator)
-    return df_gqaoa.join(df_xqaoa)
 
 
 def generate_graphs():
