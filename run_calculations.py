@@ -1,3 +1,7 @@
+"""
+Entry points for large scale parallel calculation functions.
+"""
+
 import os
 from functools import partial
 from os import path

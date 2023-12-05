@@ -289,7 +289,7 @@ class DataExtractor:
         :param aggregator: Aggregator function.
         :return: Aggregated result.
         """
-        return self.df.filter(regex= r'p_\d+$').apply(aggregator)
+        return self.df.filter(regex=r'p_\d+$').apply(aggregator)
 
     def get_cost_all(self) -> DataFrame:
         """
@@ -297,7 +297,9 @@ class DataExtractor:
         :return: Total cost for each graph.
         """
         ps = self.get_ps()
-        return self.df.filter(regex=r'p_\d+_nfev$').cumsum(axis=1) * ps
+        cost_all = self.df.filter(regex=r'p_\d+_nfev$').cumsum(axis=1) * ps
+        # cost_all = self.df.filter(regex=r'p_\d+_nfev$').cumsum(axis=1)
+        return cost_all
 
     def get_cost_average(self) -> Sequence:
         """

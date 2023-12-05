@@ -1,12 +1,13 @@
 """
-Contains plot functions.
+Entry points for figure plotting.
 """
 
 import addcopyfighandler
 import numpy as np
 from matplotlib import pyplot as plt
+from scipy import optimize
 
-from src.data_processing import exponential_form, DataExtractor
+from src.data_processing import exponential_form, DataExtractor, linear_function
 from src.plot_general import colors, Line, plot_general, save_figure
 from itertools import product
 
@@ -158,30 +159,31 @@ def plot_ar_vs_cost_depths():
     plt.show()
 
 
-# def plot_fit():
-#     method = 'qaoa/constant/0.2'
-#     # method = 'ma/qaoa_relax/constant'
-#     nodes = [9, 10, 11, 12]
-#     depths = [3]
-#     fit_func = exponential_form
-#     start_ind = 4
-#     data = get_column_statistic_all(method, nodes, depths, np.mean)
-#
-#     lines = []
-#     for ind, next_data in enumerate(data):
-#         xs = next_data[0]
-#         ys = next_data[1]
-#         params, covariance = optimize.curve_fit(fit_func, xs[start_ind:], ys[start_ind:])
-#         fitted_data = fit_func(xs, *params)
-#         lines.append(Line(xs, fitted_data, marker='none', color=ind))
-#         lines.append(Line(xs, ys, marker='o', style='none', color=ind))
-#
-#         rmse = np.sqrt(sum((fitted_data[start_ind:] - ys[start_ind:]) ** 2) / len(ys[start_ind:]))
-#         print(f'Coeffs: {params}')
-#         print(f'RMSE: {rmse}')
-#
-#     plot_general(lines)
-#     plt.show()
+def plot_fit():
+    method = 'qaoa/constant/0.2'
+    # method = 'ma/qaoa_relax/constant'
+    nodes = [9]
+    depths = [3]
+    fit_func = linear_function
+    start_ind = 0
+    df_paths = generate_paths(nodes, depths, method)
+
+    lines = []
+    for ind, next_path in enumerate(df_paths):
+        extractor = DataExtractor(next_path)
+        xs = np.array(extractor.get_ps())
+        ys = np.log10(1 - extractor.get_ar_aggregated(np.mean))
+        params, covariance = optimize.curve_fit(fit_func, xs[start_ind:], ys[start_ind:])
+        fitted_data = fit_func(xs, *params)
+        lines.append(Line(xs, fitted_data, marker='none', color=ind))
+        lines.append(Line(xs, ys, marker='o', style='none', color=ind))
+
+        rmse = np.sqrt(sum((fitted_data[start_ind:] - ys[start_ind:]) ** 2) / len(ys[start_ind:]))
+        print(f'Coeffs: {params}')
+        print(f'RMSE: {rmse}')
+
+    plot_general(lines)
+    plt.show()
 
 
 # def plot_interp_random_ar_difference_vs_p_nodes():
@@ -205,5 +207,5 @@ if __name__ == "__main__":
     # plot_ar_vs_p_nodes()
     # plot_ar_vs_p_depths()
     # plot_ar_vs_cost_nodes()
-    plot_ar_vs_cost_depths()
-    # plot_fit()
+    # plot_ar_vs_cost_depths()
+    plot_fit()

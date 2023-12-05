@@ -1,5 +1,5 @@
 """
-Example uses.
+Entry points for test single core uses.
 """
 import logging
 import time
@@ -7,19 +7,13 @@ import time
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-import tqdm
 
-from src.angle_strategies import convert_angles_tqa_to_qaoa
 from src.data_processing import numpy_str_to_array
-from src.graph_utils import get_index_edge_list
 from src.optimization import optimize_qaoa_angles, Evaluator
-from src.preprocessing import evaluate_graph_cut, evaluate_z_term
+from src.preprocessing import evaluate_graph_cut
 
 
-# from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit, optimize_angles_ma_qiskit
-
-
-def add_graph():
+def run_add_graph():
     # k = 8
     # n = 15
     # g = nx.random_regular_graph(k, n)
@@ -67,12 +61,6 @@ def run_point():
     print(f'Expectation: {res}')
 
 
-def run_draw():
-    graph = nx.read_gml('graphs/nodes_8/ed_4/1.gml', destringizer=int)
-    nx.draw(graph, with_labels=True)
-    plt.show()
-
-
 def run_optimization():
     graph = nx.read_gml('graphs/new/nodes_9/depth_3/0.gml', destringizer=int)
     # graph = nx.complete_graph(3)
@@ -102,8 +90,6 @@ def run_optimization():
 
     result = optimize_qaoa_angles(evaluator, starting_angles=starting_point)
 
-    # objective_best = optimize_angles_ma_qiskit(graph, p)
-
     print(f'Best achieved objective: {-result.fun}')
     print(f'Maximizing angles: {repr(result.x / np.pi)}')
 
@@ -111,35 +97,22 @@ def run_optimization():
     print('Done')
 
 
-def run_optimization_combo():
-    graph = nx.read_gml('graphs/all_8/3054.gml', destringizer=int)
-    p = 1
-
-    evaluator_1 = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='tqa')
-    objective_1, angles_1 = optimize_qaoa_angles(evaluator_1, starting_angles=np.array([0.5]))
-    print(f'obj: {objective_1}; angles: {angles_1}')
-
-    evaluator_2 = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='regular')
-    starting_point = convert_angles_tqa_to_qaoa(angles_1, p)
-    objective_2, angles_2 = optimize_qaoa_angles(evaluator_2, starting_angles=starting_point)
-
-    print(f'TQA: {objective_1}; {angles_1}')
-    print(f'QAOA: {objective_2}; {angles_2}')
-    print('Done')
+def run_draw_graph():
+    graph = nx.read_gml('graphs/nodes_8/ed_4/1.gml', destringizer=int)
+    nx.draw(graph, with_labels=True)
+    plt.show()
 
 
 if __name__ == '__main__':
     logging.basicConfig()
     logger = logging.getLogger('QAOA')
-    # logger.setLevel(logging.DEBUG)
     np.set_printoptions(linewidth=160, formatter={'float': lambda x: '{:.3f}'.format(x)})
 
+    # Select procedure to run below
     start = time.perf_counter()
-    # add_graph()
+    # run_add_graph()
     # run_point()
     run_optimization()
-    # run_optimization_combo()
-    # run_draw()
-    # run_gradient()
+    # run_draw_graph()
     end = time.perf_counter()
     print(f'Elapsed time: {end - start}')
