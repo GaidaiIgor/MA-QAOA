@@ -62,7 +62,7 @@ def run_point():
 
 
 def run_optimization():
-    graph = nx.read_gml('graphs/new/nodes_9/depth_3/0.gml', destringizer=int)
+    graph = nx.read_gml('graphs/main/nodes_9/depth_3/0.gml', destringizer=int)
     # graph = nx.complete_graph(3)
     # graph = read_graph_xqaoa('graphs/xqaoa/G6#128_1.csv')
     p = 2

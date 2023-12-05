@@ -11,13 +11,13 @@ class TestMAQAOA:
     @pytest.fixture
     def reg3_sub_tree(self):
         """ Tree-like subgraph of a 3-regular graph with 6 nodes and 5 edges. """
-        graph = nx.read_gml('graphs/simple/reg3_sub_tree.gml', destringizer=int)
+        graph = nx.read_gml('graphs/other/simple/reg3_sub_tree.gml', destringizer=int)
         return graph
 
     @pytest.fixture
     def reg4_n7_e14(self):
         """ Slightly harder 4-regular graph with 7 nodes and 14 edges (includes triangles). """
-        graph = nx.read_gml('graphs/simple/reg4_n7_e14.gml', destringizer=int)
+        graph = nx.read_gml('graphs/other/simple/reg4_n7_e14.gml', destringizer=int)
         return graph
 
     def test_qaoa_simple_edge(self, reg3_sub_tree):

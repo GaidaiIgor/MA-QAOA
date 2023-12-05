@@ -9,7 +9,7 @@ from src.optimization import Evaluator, optimize_qaoa_angles
 
 def run_point():
     """ Evaluates cost expectation at the given QAOA angles. """
-    graph = nx.read_gml('graphs/new/nodes_9/depth_3/0.gml', destringizer=int)
+    graph = nx.read_gml('graphs/main/nodes_9/depth_3/0.gml', destringizer=int)
     p = 2
     # Could also be set to 'ma' for MA-QAOA. Other options are available as well, see Evaluator class for more details.
     search_space = 'qaoa'
@@ -23,7 +23,7 @@ def run_point():
 
 def run_optimization():
     """ Optimizes cost expectation. """
-    graph = nx.read_gml('graphs/new/nodes_9/depth_3/0.gml', destringizer=int)
+    graph = nx.read_gml('graphs/main/nodes_9/depth_3/0.gml', destringizer=int)
     p = 2
     search_space = 'qaoa'
     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)

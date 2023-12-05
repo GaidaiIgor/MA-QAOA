@@ -22,7 +22,7 @@ def generate_paths(nodes: list, depths: list, method: str) -> list:
 def plot_ar_vs_p_heuristics_core(methods: list[str], labels: list[str], min_y: float, max_p: int):
     lines = []
     for method_ind, method in enumerate(methods):
-        extractor = DataExtractor(f'graphs/new/nodes_9/depth_3/output/{method}/out.csv')
+        extractor = DataExtractor(f'graphs/main/nodes_9/depth_3/output/{method}/out.csv')
         ps = extractor.get_ps()
         ar_mean = extractor.get_ar_aggregated(np.mean)
         ar_min = extractor.get_ar_aggregated(min)
