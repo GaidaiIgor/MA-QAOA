@@ -80,16 +80,16 @@ def init_dataframe(data_path: str, worker: WorkerBaseQAOA, out_path: str):
 
 
 def run_graphs_parallel():
-    nodes = list(range(12, 13))
-    depths = list(range(4, 7))
-    ps = list(range(5, 6))
+    nodes = list(range(9, 10))
+    depths = list(range(3, 7))
+    ps = list(range(1, 9))
 
     num_workers = 20
     convergence_threshold = 0.9995
     reader = partial(nx.read_gml, destringizer=int)
 
     for p in ps:
-        out_path_suffix = 'output/ma/qaoa_relax/constant/out.csv'
+        out_path_suffix = 'output/qaoa/constant/1/out.csv'
         out_col = f'p_{p}'
         initial_guess_from = None if p == 1 else f'p_{p - 1}'
         initial_guess_from = f'p_{p}'
@@ -97,21 +97,21 @@ def run_graphs_parallel():
         transfer_p = None if p == 1 else p - 1
 
         # worker = WorkerStandard(reader=reader, p=p, out_col=f'r_1', initial_guess_from=None, transfer_from=None, transfer_p=None, search_space='qaoa')
-        # worker_constant = WorkerConstant(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p)
+        worker_constant = WorkerConstant(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p)
         # worker_tqa = WorkerLinear(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p, search_space='tqa')
         # worker_interp = WorkerInterp(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
         # worker_fourier = WorkerFourier(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
         # worker_greedy = WorkerGreedy(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p)
         # worker_combined = WorkerCombined(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p,
         #                                  workers=[worker_interp, worker_greedy], restart_shares=[0.5, 0.5])
-        worker_ma = WorkerMA(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p,
-                             guess_provider=None, guess_format='qaoa')
-        worker = worker_ma
+        # worker_ma = WorkerMA(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p,
+        #                      guess_provider=None, guess_format='qaoa')
+        worker = worker_constant
 
         for node in nodes:
             node_depths = [3] if node < 12 else depths
             for depth in node_depths:
-                data_path = f'graphs/new/nodes_{node}/depth_{depth}/'
+                data_path = f'graphs/main/nodes_{node}/depth_{depth}/'
                 out_path = data_path + out_path_suffix
 
                 rows_func = lambda df: np.ones((df.shape[0], 1), dtype=bool) if p == 1 else df[f'p_{p - 1}'] < convergence_threshold

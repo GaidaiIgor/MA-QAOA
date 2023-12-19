@@ -170,10 +170,20 @@ def plot_relax_random_ar_difference_vs_p_depths():
     plot_for_depths(plot_relax_random_ar_difference_vs_p_general)
 
 
-# def plot_ar_vs_p_constant():
-#     constants = [0.01, 0.1, 0.2]
-#     for const in constants:
-#         extractor = DataExtractor(f'')
+def plot_ar_vs_p_constant():
+    ps = list(range(1, 9))
+    constants = [0.01, 0.05, 0.1, 0.2, 0.4, 1]
+    lines = []
+    for ind, const in enumerate(constants):
+        extractor = DataExtractor(f'graphs/main/nodes_9/depth_3/output/qaoa/constant/{const}/out.csv')
+        ars_mean = extractor.get_ar_aggregated(np.mean)[:ps[-1]]
+        ars_min = extractor.get_ar_aggregated(np.min)[:ps[-1]]
+        lines.append(Line(ps, ars_mean, color=ind, label=str(const)))
+        lines.append(Line(ps, ars_min, color=ind, style='--'))
+    plot_general(lines, ('p', 'AR'))
+    plt.axhline(1, c='k', ls='--')
+    plt.axhline(16 / 17, c='r', ls='--')
+    save_figure()
 
 
 def plot_fit_general(n_extrap: int, method_name: str, ds_param_name: str, ds_param: Sequence, method: str, aggregator_func: callable, fit_ind_range: Sequence, labels: Sequence):
@@ -247,13 +257,14 @@ def plot_ar_vs_p_fitted_nodes():
 if __name__ == "__main__":
     # plot_ar_vs_p_heuristics_qaoa_attempts_1()
     # plot_ar_vs_p_heuristics_qaoa_attempts_p()
-    plot_ar_vs_p_heuristics_ma_attempts_1()
+    # plot_ar_vs_p_heuristics_ma_attempts_1()
     # plot_ar_vs_p_nodes()
     # plot_ar_vs_p_depths()
     # plot_ar_vs_cost_nodes()
     # plot_ar_vs_cost_depths()
     # plot_relax_random_ar_difference_vs_p_nodes()
     # plot_relax_random_ar_difference_vs_p_depths()
+    plot_ar_vs_p_constant()
     # plot_ar_vs_p_fitted_nodes()
 
     plt.show()
