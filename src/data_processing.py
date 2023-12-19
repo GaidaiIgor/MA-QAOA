@@ -9,10 +9,31 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from numpy import ndarray
-from pandas import DataFrame
+from pandas import DataFrame, Series
 from scipy import optimize
 
 from src.graph_utils import get_edge_diameter
+
+
+def generate_dataset_paths(ds_param_name: str, ds_param: Sequence, methods: str | list[str]) -> ndarray:
+    """
+    Generates a list of paths to main datasets specified by the input parameters.
+    :param ds_param_name: Dataset parameter name: either nodes or depth.
+    :param ds_param: Sequence of corresponding dataset parameter values.
+    :param methods: Sequence of methods for each dataset.
+    :return: Ndarray of corresponding paths. Rows: datasets, columns: methods.
+    """
+    if isinstance(methods, str):
+        methods = [methods]
+    if ds_param_name == 'nodes':
+        result = np.array([f'graphs/main/nodes_{node}/depth_3/output/{method}/out.csv' for node in ds_param for method in methods])
+    elif ds_param_name == 'depth':
+        result = np.array([f'graphs/main/nodes_12/depth_{depth}/output/{method}/out.csv' for depth in ds_param for method in methods])
+    else:
+        raise Exception('Unknown data set parameter')
+    if len(methods) > 1:
+        result = result.reshape((len(ds_param), len(methods)))
+    return result
 
 
 def extract_numbers(str_arr: list[str]) -> list[int]:
@@ -343,7 +364,7 @@ class DataExtractor:
         ps = [int(col.split('_')[1]) for col in self.df.columns if re.match(r'p_\d+$', col)]
         return ps
 
-    def get_ar_aggregated(self, aggregator: callable) -> Sequence:
+    def get_ar_aggregated(self, aggregator: callable) -> Series:
         """
         Applies given aggregator to AR columns.
         :param aggregator: Aggregator function.
