@@ -22,8 +22,8 @@ class Line:
     xs: Sequence
     ys: Sequence
     color: tuple | int = colors[0]
-    marker: str = 'o'
-    style: str = '-'
+    marker: str | int = 'o'
+    style: str | int = '-'
     label: str = '_nolabel_'
 
     def __post_init__(self):
@@ -46,7 +46,7 @@ def assign_distinct_colors(lines: list[Line]):
 
 
 def plot_general(lines: list[Line], labels: tuple[str | None, str | None] = None, tick_multiples: tuple[float | None, float | None] = None,
-                 boundaries: tuple[float | None, float | None, float | None, float | None] = None, font_size: int = 20):
+                 boundaries: tuple[float | None, float | None, float | None, float | None] = None, font_size: int = 20, loc: str = 'best'):
     """
     Plots specified list of lines.
     :param lines: List of lines.
@@ -54,12 +54,16 @@ def plot_general(lines: list[Line], labels: tuple[str | None, str | None] = None
     :param tick_multiples: Base multiples for ticks along x and y axes.
     :param boundaries: x min, x max, y min, y max floats defining plot boundaries.
     :param font_size: Font size.
+    :param loc: Location of legend.
     :return: None.
     """
+    plt.figure()
     plt.rcParams.update({'font.size': font_size})
 
     for line in lines:
         plt.plot(line.xs, line.ys, color=line.color, marker=line.marker, linestyle=line.style, markersize=marker_sizes[line.marker], label=line.label)
+        if line.label != '_nolabel_':
+            plt.legend(loc=loc)
 
     if labels is not None:
         if labels[0] is not None:
@@ -89,7 +93,11 @@ def plot_general(lines: list[Line], labels: tuple[str | None, str | None] = None
     plt.tight_layout(pad=0.5)
 
 
-def save_figure():
-    """ Saves figure. """
-    file_name = inspect.currentframe().f_back.f_code.co_name[5:]
+def save_figure(file_name: str = None):
+    """
+    Saves figure to a file in temp/figures.
+    :param file_name: Name of the file or None to use caller's name (without plot_).
+    :return: None.
+    """
+    file_name = inspect.currentframe().f_back.f_code.co_name[5:] if file_name is None else file_name
     plt.savefig(f'temp/figures/{file_name}.jpg', dpi=300, bbox_inches='tight')

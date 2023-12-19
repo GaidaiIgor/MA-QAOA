@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from numpy import ndarray
 from pandas import DataFrame
+from scipy import optimize
 
 from src.graph_utils import get_edge_diameter
 
@@ -23,19 +24,78 @@ def extract_numbers(str_arr: list[str]) -> list[int]:
     return [int(name.split('_')[1]) for name in str_arr]
 
 
-def exponential_form(ps, c1, c2):
+def exponential_form(xs: Sequence, c0: float, c1: float):
     """
-    Fitting funtion for AR vs p data.
-    :param ps: Values of p.
-    :param c1: Fitting coefficient.
-    :param c2: Fitting coefficient.
+    Exponential fitting funtion.
+    :param xs: Values of argument.
+    :param c0: Fitting coefficient 0.
+    :param c1: Fitting coefficient 1.
     :return: Fitted value.
     """
-    return 1 - c1 * np.exp(-c2 * ps)
+    return c0 * np.power(10, -c1 * xs)
 
 
-def linear_function(ps, c1, c2):
-    return c1 + c2 * ps
+def exponential_form_const(xs: int | Sequence, c0: float, c1: float, c2: float):
+    """
+    Exponential fitting funtion with a shift parameter.
+    :param xs: Values of argument.
+    :param c0: Fitting coefficient 0.
+    :param c1: Fitting coefficient 1.
+    :param c2: Fitting coefficient 2 (shift).
+    :return: Fitted value.
+    """
+    return c0 * np.power(10, -c1 * xs) + c2
+
+
+def polynomial_form(xs: Sequence, c0: float, c1: float):
+    """
+    Polynomial fitting function.
+    :param xs: Values of argument.
+    :param c0: Fitting coefficient 0.
+    :param c1: Fitting coefficient 1.
+    :return: Fitted value.
+    """
+    return c0 * np.power(xs, -c1)
+
+
+def polynomial_form_const(xs: int | Sequence, c0: float, c1: float, c2: float):
+    """
+    Polynomial fitting function with a shift parameter.
+    :param xs: Values of argument.
+    :param c0: Fitting coefficient 0.
+    :param c1: Fitting coefficient 1.
+    :param c2: Fitting coefficient 2 (shift).
+    :return: Fitted value.
+    """
+    return c0 * np.power(xs, -c1) + c2
+
+
+def calc_rmse(xs: ndarray, ys: ndarray) -> float:
+    """
+    Returns Root Mean Square Error between the two arrays of the same size.
+    :param xs: Array 1.
+    :param ys: Array 2.
+    :return: RMSE.
+    """
+    return np.sqrt(((xs - ys) ** 2).mean())
+
+
+def fit_data(xs: Sequence, ys: Sequence, fit_func: callable, fit_ind_range: Sequence = None, **kwargs) -> tuple:
+    """
+    Fits given data with given fitting function.
+    :param xs: x-values for fit.
+    :param ys: y-values for fit.
+    :param fit_func: Fitting function.
+    :param fit_ind_range: Range of indices for the fit.
+    :param kwargs: Additional kwargs for optimize.curve_fit function.
+    :return: 1) Fitted y-values 2) Optimized fitting coefficients 3) RMSE of the fit.
+    """
+    if fit_ind_range is None:
+        fit_ind_range = (0, len(xs))
+    fit_coeffs, covariance = optimize.curve_fit(fit_func, xs[fit_ind_range[0]:fit_ind_range[1]], ys[fit_ind_range[0]:fit_ind_range[1]], **kwargs)
+    fitted = fit_func(xs, *fit_coeffs)
+    rmse = calc_rmse(fitted[fit_ind_range[0]:fit_ind_range[1]], ys[fit_ind_range[0]:fit_ind_range[1]])
+    return fitted, fit_coeffs, rmse
 
 
 def calculate_edge_diameter(df: DataFrame):
