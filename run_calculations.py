@@ -89,15 +89,15 @@ def run_graphs_parallel():
     reader = partial(nx.read_gml, destringizer=int)
 
     for p in ps:
-        out_path_suffix = 'output/qaoa/constant/1/out.csv'
+        out_path_suffix = 'output/qaoa/random/attempts_1/nfev/out.csv'
         out_col = f'p_{p}'
         initial_guess_from = None if p == 1 else f'p_{p - 1}'
         initial_guess_from = f'p_{p}'
         transfer_from = None if p == 1 else f'p_{p - 1}'
         transfer_p = None if p == 1 else p - 1
 
-        # worker = WorkerStandard(reader=reader, p=p, out_col=f'r_1', initial_guess_from=None, transfer_from=None, transfer_p=None, search_space='qaoa')
-        worker_constant = WorkerConstant(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p)
+        worker_standard = WorkerStandard(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p, search_space='qaoa')
+        # worker_constant = WorkerConstant(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p)
         # worker_tqa = WorkerLinear(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p, search_space='tqa')
         # worker_interp = WorkerInterp(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
         # worker_fourier = WorkerFourier(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
@@ -106,7 +106,7 @@ def run_graphs_parallel():
         #                                  workers=[worker_interp, worker_greedy], restart_shares=[0.5, 0.5])
         # worker_ma = WorkerMA(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p,
         #                      guess_provider=None, guess_format='qaoa')
-        worker = worker_constant
+        worker = worker_standard
 
         for node in nodes:
             node_depths = [3] if node < 12 else depths

@@ -112,7 +112,7 @@ def plot_ar_vs_cost_general(ds_param_name: str, ds_param: Sequence, labels: list
     lines = []
     for method_ind, method in enumerate(methods):
         max_p = max_ps[method_ind]
-        df_paths = generate_dataset_paths(ds_param_name, ds_param, method)
+        df_paths = generate_dataset_paths(ds_param_name, ds_param, method).tolist()
         for path_ind, path in enumerate(df_paths):
             extractor = DataExtractor(path)
             xs = extractor.get_cost_average()[:max_p]
@@ -124,14 +124,9 @@ def plot_ar_vs_cost_general(ds_param_name: str, ds_param: Sequence, labels: list
             ys = extractor.get_ar_aggregated(min)[:max_p]
             lines.append(Line(xs, ys, colors[path_ind], style='--', marker=method_ind))
 
-    boundaries = (None, None, 0.68, 1.005)
-    tick_multiples = (None, 0.02)
-    plot_general(lines, ('Cost', 'AR'), tick_multiples, boundaries)
-    plt.legend(loc='lower right', fontsize='small')
-    conv_limit = 1
-    np_limit = 16 / 17
-    plt.axhline(conv_limit, c='k', ls='--')
-    plt.axhline(np_limit, c='r', ls='--')
+    plot_general(lines, ('Cost', 'AR'), (None, 0.02), (None, None, 0.68, 1.005))
+    plt.axhline(1, c='k', ls='--')
+    plt.axhline(16 / 17, c='r', ls='--')
 
 
 def plot_ar_vs_cost_nodes():
@@ -181,6 +176,27 @@ def plot_ar_vs_p_constant():
         lines.append(Line(ps, ars_mean, color=ind, label=str(const)))
         lines.append(Line(ps, ars_min, color=ind, style='--'))
     plot_general(lines, ('p', 'AR'))
+    plt.axhline(1, c='k', ls='--')
+    plt.axhline(16 / 17, c='r', ls='--')
+    save_figure()
+
+
+def plot_ar_vs_cost_qaoa_heuristics():
+    max_p = 8
+    methods = ['constant/0.2', 'tqa/attempts_1', 'interp/attempts_1', 'fourier/attempts_1', 'random/attempts_1/nfev_added']
+    labels = ['Constant', 'TQA', 'Interp', 'Fourier', 'Random']
+    lines = []
+    for method_ind, method in enumerate(methods):
+        extractor = DataExtractor(f'graphs/main/nodes_9/depth_3/output/qaoa/{method}/out.csv')
+        xs = extractor.get_cost_average()[:max_p]
+        ys = extractor.get_ar_aggregated(np.mean)[:max_p]
+        lines.append(Line(xs, ys, color=method_ind, label=labels[method_ind]))
+
+        xs = extractor.get_cost_worst_case()[:max_p]
+        ys = extractor.get_ar_aggregated(min)[:max_p]
+        lines.append(Line(xs, ys, color=method_ind, style='--'))
+
+    plot_general(lines, ('Cost', 'AR'), (None, None), (None, None, None, 1.005))
     plt.axhline(1, c='k', ls='--')
     plt.axhline(16 / 17, c='r', ls='--')
     save_figure()
@@ -264,7 +280,8 @@ if __name__ == "__main__":
     # plot_ar_vs_cost_depths()
     # plot_relax_random_ar_difference_vs_p_nodes()
     # plot_relax_random_ar_difference_vs_p_depths()
-    plot_ar_vs_p_constant()
+    # plot_ar_vs_p_constant()
+    plot_ar_vs_cost_qaoa_heuristics()
     # plot_ar_vs_p_fitted_nodes()
 
     plt.show()
