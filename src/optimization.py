@@ -10,9 +10,10 @@ from typing import Callable
 
 import numpy as np
 import numpy.random as random
-from scipy import optimize
 from networkx import Graph
 from numpy import ndarray
+from qiskit_aer.primitives import Estimator as AerEstimator
+from scipy import optimize
 from scipy.optimize import OptimizeResult
 
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1
@@ -21,11 +22,7 @@ from src.data_processing import normalize_qaoa_angles
 from src.graph_utils import get_index_edge_list
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
 from src.simulation.plain import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
-
-# from qiskit_aer.primitives import Estimator as AerEstimator
-# from qiskit.primitives import Estimator
-# from src.simulation.qiskit_backend import get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast, get_ma_ansatz_alt
-# from src.simulation.qiskit_backend import evaluate_angles_ma_qiskit, get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit_fast
+from src.simulation.qiskit_backend import get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit
 
 
 @dataclass
@@ -64,7 +61,7 @@ class Evaluator:
             ma_qaoa_func = tqa_decorator(qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits), p)
         else:
             raise 'Unknown search space'
-        return Evaluator(change_sign(ma_qaoa_func), num_angles)
+        return Evaluator(ma_qaoa_func, num_angles)
 
     @staticmethod
     def get_evaluator_general(target_vals: ndarray, driver_term_vals: ndarray, p: int, search_space: str = 'ma') -> Evaluator:
@@ -147,36 +144,31 @@ class Evaluator:
             num_angles = 2
         return Evaluator(change_sign(func), num_angles)
 
-    # @staticmethod
-    # def get_evaluator_qiskit(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
-    #     """
-    #     Returns qiskit evaluator of maxcut expectation.
-    #     :param graph: Graph for maxcut.
-    #     :param p: Number of QAOA layers.
-    #     :param search_space: Name of the strategy to choose the number of variable parameters.
-    #     :return: Evaluator that computes maxcut expectation achieved by MA-QAOA with given angles (implemented with qiskit).
-    #     The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
-    #     """
-    #     func = lambda angles: evaluate_angles_ma_qiskit(angles, graph, p)
-    #     return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
+    @staticmethod
+    def get_evaluator_standard_maxcut_qiskit(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
+        """
+        Returns qiskit evaluator of maxcut expectation.
+        :param graph: Graph for maxcut.
+        :param p: Number of QAOA layers.
+        :param search_space: Name of the strategy to choose the number of variable parameters.
+        :return: Evaluator that computes maxcut expectation achieved by MA-QAOA with given angles (implemented with qiskit).
+        The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
+        """
+        maxcut_hamiltonian = get_observable_maxcut(graph)
+        estimator = AerEstimator(approximation=True, run_options={'shots': None})
+        ansatz = get_ma_ansatz(graph, p)
+        func = lambda angles: evaluate_angles_ma_qiskit(angles, ansatz, estimator, maxcut_hamiltonian)
+        return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
 
-    # @staticmethod
-    # def get_evaluator_qiskit_fast(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
-    #     """
-    #     Returns qiskit evaluator of maxcut expectation.
-    #     :param graph: Graph for maxcut.
-    #     :param p: Number of QAOA layers.
-    #     :param search_space: Name of the strategy to choose the number of variable parameters.
-    #     :return: Evaluator that computes maxcut expectation achieved by MA-QAOA with given angles (implemented with qiskit).
-    #     The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
-    #     """
-    #     maxcut_hamiltonian = get_observable_maxcut(graph)
-    #     estimator = AerEstimator(approximation=True, run_options={'shots': None})
-    #     # estimator = Estimator()
-    #     # ansatz = get_ma_ansatz(graph, p)
-    #     ansatz = get_ma_ansatz_alt(graph, p)
-    #     func = lambda angles: evaluate_angles_ma_qiskit_fast(angles, ansatz, estimator, maxcut_hamiltonian)
-    #     return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
+    def evaluate(self, angles: ndarray) -> float:
+        """
+        Evaluates expectation at the given angles.
+        :param angles: Array of angles.
+        :return: Expectation.
+        """
+        if len(angles) != self.num_angles:
+            raise Exception('Wrong number of angles')
+        return self.func(angles)
 
     def fix_params(self, inds, values):
         """
@@ -187,14 +179,6 @@ class Evaluator:
         """
         self.func = fix_angles(self.func, self.num_angles, inds, values)
         self.num_angles -= len(inds)
-
-    # @staticmethod
-    # def get_evaluator_general_scheme(target_vals: ndarray, driver_term_vals: ndarray, p: int, duplication_scheme: list[ndarray]) -> Evaluator:
-    #     """ Test method """
-    #     func = lambda angles: calc_expectation_general_qaoa(angles, driver_term_vals, p, target_vals)
-    #     func = qaoa_scheme_decorator(func, duplication_scheme)
-    #     num_angles = len(duplication_scheme)
-    #     return Evaluator(change_sign(func), num_angles)
 
 
 def change_sign(func: callable) -> callable:
@@ -239,7 +223,7 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, 
         result = optimize.minimize(evaluator.func, next_angles, method=method, **kwargs)
         if not result.success:
             print(result.message)
-            result = optimize.minimize(evaluator.func, next_angles, method='Nelder-Mead', **kwargs)
+            result = optimize.minimize(change_sign(evaluator.func), next_angles, method='Nelder-Mead', **kwargs)
             if not result.success:
                 print(result)
                 raise Exception('Optimization failed')
