@@ -7,6 +7,7 @@ import time
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+from skquant.interop.scipy import snobfit
 
 from src.data_processing import numpy_str_to_array
 from src.optimization import optimize_qaoa_angles, Evaluator
@@ -33,25 +34,23 @@ def run_add_graph():
 
 
 def run_point():
-    graph = nx.read_gml('graphs/other/simple/n2_e1.gml', destringizer=int)
-    p = 1
-    angles = np.array([np.pi / 8] * 2 * p)
+    graph = nx.read_gml('graphs/other/simple/n6_e6.gml', destringizer=int)
+    p = 2
+    angles = np.array([i * np.pi / 8 for i in range(24)])
 
-    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='qaoa')
-    print(f'Standard: {evaluator.evaluate(angles)}')
+    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='ma')
+    # print(f'Standard: {evaluator.evaluate(angles)}')
 
-    evaluator = Evaluator.get_evaluator_qiskit_alt(graph, p, 'qaoa')
-    print(f'Qiskit: {evaluator.evaluate(angles)}')
+    evaluator = Evaluator.get_evaluator_standard_maxcut_qiskit(graph, p, search_space='ma')
+    samples = []
+    for i in range(1000):
+        samples.append(evaluator.evaluate(angles))
 
-    # samples = []
-    # for i in range(100):
-    #     samples.append(-evaluator.func(angles))
-    #
-    # print(f'Mean: {np.mean(samples)}; Std: {np.std(samples)}')
+    print(f'Mean: {np.mean(samples)}; Std: {np.std(samples)}')
 
 
 def run_optimization():
-    graph = nx.read_gml('graphs/main/nodes_9/depth_3/0.gml', destringizer=int)
+    graph = nx.read_gml('graphs/other/simple/n6_e6.gml', destringizer=int)
     p = 1
     search_space = 'qaoa'
 
@@ -70,13 +69,12 @@ def run_optimization():
 
     # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
     evaluator = Evaluator.get_evaluator_standard_maxcut_qiskit(graph, p, search_space)
-    # evaluator = Evaluator.get_evaluator_standard_maxcut_analytical(graph, use_multi_angle=True)
 
     starting_point = np.array([1] * evaluator.num_angles) * np.pi / 8
-    # starting_point = numpy_str_to_array('[-0.17993277 -1.30073361 -1.08469108 -1.59744761]')
-    # starting_point = convert_angles_qaoa_to_ma(starting_point, len(graph.edges), len(graph))
 
-    result = optimize_qaoa_angles(evaluator, starting_angles=starting_point)
+    bounds = [[-np.pi, np.pi] for i in range(evaluator.num_angles)]
+    budget = 100
+    result = optimize_qaoa_angles(evaluator, starting_angles=starting_point, bounds=bounds, method=snobfit, options={'budget': budget})
 
     print(f'Best achieved objective: {-result.fun}')
     print(f'Maximizing angles: {repr(result.x / np.pi)}')
@@ -97,8 +95,8 @@ if __name__ == '__main__':
     # Select procedure to run below
     start = time.perf_counter()
     # run_add_graph()
-    run_point()
-    # run_optimization()
+    # run_point()
+    run_optimization()
     # run_draw_graph()
     end = time.perf_counter()
     print(f'Elapsed time: {end - start}')

@@ -2,8 +2,8 @@ from networkx import Graph
 from numpy import ndarray
 from qiskit import QuantumCircuit
 from qiskit.circuit import ParameterVector
+from qiskit.primitives import BaseEstimator
 from qiskit.quantum_info import SparsePauliOp
-from qiskit_aer.primitives import Estimator as AerEstimator
 
 from src.graph_utils import get_index_edge_list
 
@@ -44,7 +44,7 @@ def get_observable_maxcut(graph: Graph) -> SparsePauliOp:
     return SparsePauliOp.from_sparse_list([('', [], edges.shape[0] / 2)] + [('ZZ', list(edge), -0.5) for edge in edges], len(graph))
 
 
-def evaluate_angles_ma_qiskit(angles: ndarray, ansatz: QuantumCircuit, estimator: AerEstimator, hamiltonian: SparsePauliOp) -> float:
+def evaluate_angles_ma_qiskit(angles: ndarray, ansatz: QuantumCircuit, estimator: BaseEstimator, hamiltonian: SparsePauliOp) -> float:
     """
     Evaluates maxcut expectation with MA-QAOA for given angles, using already constructed qiskit classes.
     :param angles: MA-QAOA angles.

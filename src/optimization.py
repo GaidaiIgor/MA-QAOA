@@ -155,7 +155,11 @@ class Evaluator:
         The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
         """
         maxcut_hamiltonian = get_observable_maxcut(graph)
-        estimator = AerEstimator(approximation=True, run_options={'shots': None})
+        estimator = AerEstimator(approximation=True, run_options={'shots': 1024})
+        # backend = Aer.get_backend('aer_simulator')
+        # backend = AerSimulator()
+        # backend.set_options(shots=100)
+        # estimator = BackendEstimator(backend)
         ansatz = get_ma_ansatz(graph, p)
         func = lambda angles: evaluate_angles_ma_qiskit(angles, ansatz, estimator, maxcut_hamiltonian)
         return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
@@ -192,7 +196,7 @@ def change_sign(func: callable) -> callable:
     return func_changed_sign
 
 
-def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, method: str = 'L-BFGS-B', num_restarts: int = 1, objective_max: float = None,
+def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, method: str | callable = 'L-BFGS-B', num_restarts: int = 1, objective_max: float = None,
                          objective_tolerance: float = 0.9995, normalize_angles: bool = True, **kwargs) -> OptimizeResult:
     """
     Wrapper around minimizer function that restarts optimization from multiple random starting points to minimize evaluator.
@@ -220,7 +224,7 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, 
         else:
             next_angles = random.uniform(-np.pi, np.pi, evaluator.num_angles)
 
-        result = optimize.minimize(evaluator.func, next_angles, method=method, **kwargs)
+        result = optimize.minimize(change_sign(evaluator.func), next_angles, method=method, **kwargs)
         if not result.success:
             print(result.message)
             result = optimize.minimize(change_sign(evaluator.func), next_angles, method='Nelder-Mead', **kwargs)
