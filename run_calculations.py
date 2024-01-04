@@ -19,30 +19,50 @@ from src.parallel import optimize_expectation_parallel, WorkerFourier, WorkerSta
 
 def generate_graphs():
     num_graphs = 1000
-    max_attempts = 10 ** 10
-    nodes = 10
-    depth = 6
-    edge_prob = 0.1
-    out_path = f'graphs/new/nodes_{nodes}/depth_{depth}'
+    max_attempts = 10 ** 5
+    nodes = 7
+    target_depth = 3
+    edge_prob = 0.6
+    out_path = f'graphs/other/nodes_{nodes}/'
 
     graphs = np.empty(num_graphs, dtype=object)
-    graphs_generated = 0
+    valid_count = 0
+    disconnected_count = 0
+    wrong_depth_count = 0
+    isomorphic_count = 0
+    avg_depth = 0
     for i in range(max_attempts):
         next_graph = nx.gnp_random_graph(nodes, edge_prob)
-        if not nx.is_connected(next_graph):
-            continue
-        if get_max_edge_depth(next_graph) != depth:
-            continue
-        if is_isomorphic(next_graph, graphs[:graphs_generated]):
-            continue
-        graphs[graphs_generated] = next_graph
-        graphs_generated += 1
-        print(f'{graphs_generated}')
-        if graphs_generated == num_graphs:
+        connected = nx.is_connected(next_graph)
+        depth = get_max_edge_depth(next_graph)
+        isomorphic = is_isomorphic(next_graph, graphs[:valid_count])
+        avg_depth = (avg_depth * i + depth) / (i + 1) if i > 0 else depth
+
+        if not connected:
+            disconnected_count += 1
+        if depth != target_depth:
+            wrong_depth_count += 1
+        if isomorphic:
+            isomorphic_count += 1
+        if connected and depth == target_depth and not isomorphic:
+            graphs[valid_count] = next_graph
+            valid_count += 1
+            print(f'\rGraphs generated: {valid_count}', end='')
+        if valid_count == num_graphs:
+            success = True
             break
     else:
-        raise 'Failed to generate connected set'
-    print('Generation done')
+        success = False
+
+    print(f'\nTotal disconnected: {disconnected_count}')
+    print(f'Total wrong depth: {wrong_depth_count}')
+    print(f'Total isomorphic: {isomorphic_count}')
+    print(f'Average depth: {avg_depth}')
+    print(f'Success rate: {valid_count / i}')
+    if success:
+        print('Generation done')
+    else:
+        raise Exception('Failed to generate a valid graph set')
 
     # print('Calculating depth')
     # depths = [get_max_edge_depth(graph) for graph in graphs]
@@ -168,7 +188,7 @@ def run_merge():
 if __name__ == '__main__':
     np.set_printoptions(threshold=np.inf, linewidth=np.inf)
 
-    # generate_graphs()
-    run_graphs_parallel()
+    generate_graphs()
+    # run_graphs_parallel()
     # run_merge()
     # run_correct()

@@ -10,9 +10,13 @@ from typing import Callable
 
 import numpy as np
 import numpy.random as random
+import qiskit
+from matplotlib import pyplot as plt
 from networkx import Graph
 from numpy import ndarray
+from qiskit import converters
 from qiskit_aer.primitives import Estimator as AerEstimator
+from qiskit_ibm_runtime import Options, Session, QiskitRuntimeService, Estimator as IbmEstimator
 from scipy import optimize
 from scipy.optimize import OptimizeResult
 
@@ -22,7 +26,7 @@ from src.data_processing import normalize_qaoa_angles
 from src.graph_utils import get_index_edge_list
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
 from src.simulation.plain import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
-from src.simulation.qiskit_backend import get_observable_maxcut, get_ma_ansatz, evaluate_angles_ma_qiskit
+from src.simulation.qiskit_backend import get_observable_maxcut, get_qaoa_ansatz, evaluate_angles_ma_qiskit
 
 
 @dataclass
@@ -145,23 +149,59 @@ class Evaluator:
         return Evaluator(change_sign(func), num_angles)
 
     @staticmethod
-    def get_evaluator_standard_maxcut_qiskit(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
+    def get_evaluator_standard_maxcut_qiskit_simulator(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
         """
-        Returns qiskit evaluator of maxcut expectation.
+        Returns evaluator of maxcut expectation evaluated via qiskit's Aer simulator.
         :param graph: Graph for maxcut.
         :param p: Number of QAOA layers.
         :param search_space: Name of the strategy to choose the number of variable parameters.
-        :return: Evaluator that computes maxcut expectation achieved by MA-QAOA with given angles (implemented with qiskit).
+        :return: Evaluator that computes maxcut expectation achieved by MA-QAOA with given angles.
         The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
         """
-        maxcut_hamiltonian = get_observable_maxcut(graph)
+        ansatz = get_qaoa_ansatz(graph, p)
+        observable = get_observable_maxcut(graph)
+
         estimator = AerEstimator(approximation=True, run_options={'shots': 1024})
         # backend = Aer.get_backend('aer_simulator')
-        # backend = AerSimulator()
-        # backend.set_options(shots=100)
         # estimator = BackendEstimator(backend)
-        ansatz = get_ma_ansatz(graph, p)
-        func = lambda angles: evaluate_angles_ma_qiskit(angles, ansatz, estimator, maxcut_hamiltonian)
+
+        func = lambda angles: evaluate_angles_ma_qiskit(angles, ansatz, estimator, observable)
+        return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
+
+    @staticmethod
+    def get_evaluator_standard_maxcut_qiskit_hardware(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
+        """
+        Returns qiskit evaluator of maxcut expectation evaluated via IBM's hardware.
+        :param graph: Graph for maxcut.
+        :param p: Number of QAOA layers.
+        :param search_space: Name of the strategy to choose the number of variable parameters.
+        :return: Evaluator that computes maxcut expectation achieved by MA-QAOA with given angles.
+        The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
+        """
+        ansatz = get_qaoa_ansatz(graph, p)
+        observable = get_observable_maxcut(graph)
+        service = QiskitRuntimeService()
+        backend = service.get_backend('ibm_osaka')
+
+        # ansatz_transpiled = qiskit.transpile(ansatz, backend, optimization_level=2)
+        # observable_transpiled = observable.apply_layout(ansatz_transpiled.layout)
+        # dag = converters.circuit_to_dag(ansatz_transpiled)
+        # idle_qubits = list(dag.idle_wires())
+        # qubits_used = dag.num_qubits() - len(idle_qubits)
+        # print(f'Qubits: {qubits_used}; Depth: {ansatz_transpiled.depth()}')
+        # ansatz = ansatz_transpiled
+        # observable = observable_transpiled
+        # ansatz_transpiled.draw(output='mpl', style='iqp', idle_wires=False)
+        # plt.show()
+
+        session = Session(backend=backend)
+        options = Options()
+        options.transpilation.skip_transpilation = False
+        options.optimization_level = 2
+        options.resilience_level = 2
+        estimator = IbmEstimator(session=session, options=options)
+
+        func = lambda angles: evaluate_angles_ma_qiskit(angles, ansatz, estimator, observable)
         return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
 
     def evaluate(self, angles: ndarray) -> float:
