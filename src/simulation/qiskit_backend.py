@@ -4,33 +4,50 @@ from qiskit import QuantumCircuit
 from qiskit.circuit import ParameterVector
 from qiskit.primitives import BaseEstimator
 from qiskit.quantum_info import SparsePauliOp
+from qiskit_ibm_runtime import Session, IBMRuntimeError
 
 from src.graph_utils import get_index_edge_list
 
 
-def get_ma_ansatz(graph: Graph, p: int) -> QuantumCircuit:
+def get_qaoa_ansatz(graph: Graph, p: int, search_space: str = 'ma') -> QuantumCircuit:
     """
     Returns parametrized MA-QAOA ansatz for VQE.
     :param graph: Graph for maxcut.
     :param p: Number of QAOA layers.
+    :param search_space: Name of the strategy to choose the number of variable parameters. ma or qaoa.
     :return: Parametrized MA-QAOA ansatz for VQE.
     """
     edges = get_index_edge_list(graph)
-    params = ParameterVector('angles', (len(graph) + len(graph.edges)) * p)
+    if search_space == 'qaoa':
+        num_params = 2 * p
+    elif search_space == 'ma':
+        num_params = (len(graph) + len(graph.edges)) * p
+    else:
+        raise Exception('Unknown search space')
+    params = ParameterVector('angles', num_params)
 
     circuit = QuantumCircuit(len(graph))
     circuit.h(range(len(graph)))
-    ind = 0
+    param_ind = 0
     for layer in range(p):
         for edge in edges:
             circuit.cx(edge[0], edge[1])
-            circuit.rz(2 * params[ind], edge[1])
+            circuit.rz(2 * params[param_ind], edge[1])
             circuit.cx(edge[0], edge[1])
-            ind += 1
+            if search_space == 'ma':
+                param_ind += 1
+
+        if search_space == 'qaoa':
+            param_ind += 1
 
         for node in range(len(graph)):
-            circuit.rx(2 * params[ind], node)
-            ind += 1
+            circuit.rx(2 * params[param_ind], node)
+            if search_space == 'ma':
+                param_ind += 1
+
+        if search_space == 'qaoa':
+            param_ind += 1
+
     return circuit
 
 
@@ -54,9 +71,40 @@ def evaluate_angles_ma_qiskit(angles: ndarray, ansatz: QuantumCircuit, estimator
     :return: Maxcut expectation value.
     """
     bound_circuit = ansatz.bind_parameters(angles)
-    job = estimator.run(bound_circuit, hamiltonian)
+    try:
+        job = estimator.run(bound_circuit, hamiltonian)
+    except IBMRuntimeError:
+        # Re-open timed out session
+        backend = estimator.session.backend()
+        estimator.session = Session(backend=backend)
+        job = estimator.run(bound_circuit, hamiltonian)
     expectation = job.result().values[0]
     return expectation
+
+
+# def optimize_angles_qiskit(graph: Graph, p: int, search_space: str, initial_point: ndarray) -> VQEResult:
+#     """
+#     Optimizes MA-QAOA angles and returns optimized cut expectation value.
+#     :param graph: Graph for maxcut.
+#     :param p: Number of QAOA layers.
+#     :param search_space: Name of the strategy to choose the number of variable parameters. ma or qaoa.
+#     :param initial_point: Initial point for the optimization.
+#     :return: Optimized cut expectation value.
+#     """
+#     maxcut_hamiltonian = get_observable_maxcut(graph)
+#     ansatz = get_qaoa_ansatz(graph, p, search_space)
+#
+#     # estimator = PrimitiveEstimator()
+#     # estimator = AerEstimator(approximation=False, run_options={'shots': 1e4})
+#     estimator = IbmEstimator(session=Session(backend='ibm_osaka'))
+#
+#     optimizer = partial(optimize.minimize, method='cobyla')
+#     # ansatz.parameter_bounds = [(-np.pi, np.pi)] * ansatz.num_parameters
+#     # optimizer = SNOBFIT(verbose=True)
+#
+#     vqe = VQE(estimator, ansatz, optimizer, initial_point=initial_point)
+#     result = vqe.compute_minimum_eigenvalue(-maxcut_hamiltonian)
+#     return result
 
 
 # def evaluate_angles_ma_qiskit(angles: ndarray, graph: Graph, p: int) -> float:
@@ -74,26 +122,6 @@ def evaluate_angles_ma_qiskit(angles: ndarray, ansatz: QuantumCircuit, estimator
 #     ansatz = get_ma_ansatz(graph, p).bind_parameters(angles)
 #     job = estimator.run(ansatz, maxcut_hamiltonian)
 #     return job.result().values[0]
-
-
-# def optimize_angles_ma_qiskit(graph: Graph, p: int) -> float:
-#     """
-#     Optimizes MA-QAOA angles and returns optimized cut expectation value.
-#     :param graph: Graph for maxcut.
-#     :param p: Number of QAOA layers.
-#     :return: Optimized cut expectation value.
-#     """
-#     # estimator = PrimitiveEstimator()
-#     estimator = AerEstimator(approximation=False, run_options={'shots': 1e4})
-#     ansatz = get_ma_ansatz(graph, p)
-#     optimizer = partial(optimize.minimize, options={'disp': True})
-#     # ansatz.parameter_bounds = [(-np.pi, np.pi)] * ansatz.num_parameters
-#     # optimizer = SNOBFIT(verbose=True)
-#     initial_point = np.ones((ansatz.num_parameters,)) * np.pi / 8
-#     vqe = VQE(estimator, ansatz, optimizer, initial_point=initial_point)
-#     maxcut_hamiltonian = get_observable_maxcut(graph)
-#     result = vqe.compute_minimum_eigenvalue(-maxcut_hamiltonian)
-#     return -result.eigenvalue.real
 
 
 # def evaluate_angles_ma_qiskit_debug(angles: ndarray, ansatz: QuantumCircuit, simulator: AerSimulator, hamiltonian: SparsePauliOp) -> float:
