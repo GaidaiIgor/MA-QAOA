@@ -183,14 +183,13 @@ class Evaluator:
         service = QiskitRuntimeService()
         backend = service.get_backend('ibm_osaka')
 
-        # ansatz_transpiled = qiskit.transpile(ansatz, backend, optimization_level=2)
-        # observable_transpiled = observable.apply_layout(ansatz_transpiled.layout)
-        # dag = converters.circuit_to_dag(ansatz_transpiled)
-        # idle_qubits = list(dag.idle_wires())
-        # qubits_used = dag.num_qubits() - len(idle_qubits)
-        # print(f'Qubits: {qubits_used}; Depth: {ansatz_transpiled.depth()}')
+        ansatz_transpiled = qiskit.transpile(ansatz, backend, optimization_level=2)
+        dag = converters.circuit_to_dag(ansatz_transpiled)
+        idle_qubits = list(dag.idle_wires())
+        qubits_used = dag.num_qubits() - len(idle_qubits)
+        print(f'Qubits: {qubits_used}; Depth: {ansatz_transpiled.depth()}')
         # ansatz = ansatz_transpiled
-        # observable = observable_transpiled
+        # observable = observable.apply_layout(ansatz_transpiled.layout)
         # ansatz_transpiled.draw(output='mpl', style='iqp', idle_wires=False)
         # plt.show()
 

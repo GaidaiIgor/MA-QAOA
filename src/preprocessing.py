@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
+from typing import Sequence
 
 import numpy as np
 from networkx import Graph
@@ -74,7 +75,7 @@ class PSubset:
 
 
 @njit
-def evaluate_z_term(term: ndarray, num_qubits: int) -> ndarray:
+def evaluate_z_term(term: Sequence, num_qubits: int) -> ndarray:
     """
     Evaluates a given Z-term of Pauli Z expansion in the computational basis with given number of qubits.
     :param term: Term to evaluate, specified as a 1D array of indices on which Z operators act in big endian format.
