@@ -21,12 +21,15 @@ from scipy import optimize
 from scipy.optimize import OptimizeResult
 
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1
-from src.angle_strategies import qaoa_decorator, linear_decorator, tqa_decorator, fix_angles, fourier_decorator
+from src.angle_strategies import qaoa_decorator, linear_decorator, tqa_decorator, fix_angles, fourier_decorator, SearchSpace
 from src.data_processing import normalize_qaoa_angles
 from src.graph_utils import get_index_edge_list
 from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
 from src.simulation.plain import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
 from src.simulation.qiskit_backend import get_observable_maxcut, get_qaoa_ansatz, evaluate_angles_ma_qiskit
+
+
+call_counter = 0
 
 
 @dataclass
@@ -40,14 +43,14 @@ class Evaluator:
     num_angles: int
 
     @staticmethod
-    def wrap_parameter_strategy(ma_qaoa_func: callable, num_qubits: int, num_driver_terms: int, p: int, search_space: str = 'ma') -> Evaluator:
+    def wrap_parameter_strategy(ma_qaoa_func: callable, num_qubits: int, num_driver_terms: int, p: int, search_space: str | SearchSpace = 'ma') -> Evaluator:
         """
         Wraps MA-QAOA function input according to the specified angle strategy.
         :param ma_qaoa_func: MA-QAOA function of angles only to be maximized.
         :param num_qubits: Number of qubits.
         :param num_driver_terms: Number of terms in the driver function.
         :param p: Number of QAOA layers.
-        :param search_space: Name of the strategy to choose the number of variable parameters.
+        :param search_space: Name of the search space to use or SearchSpace instance for custom search spaces.
         :return: Simulation evaluator. The order of input parameters is according to the angle strategy.
         """
         if search_space == 'general' or search_space == 'ma' or search_space == 'xqaoa':
@@ -63,6 +66,9 @@ class Evaluator:
         elif search_space == 'tqa':
             num_angles = 1
             ma_qaoa_func = tqa_decorator(qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits), p)
+        elif isinstance(search_space, SearchSpace):
+            num_angles = search_space.basis.shape[0]
+            ma_qaoa_func = search_space.apply_interface(ma_qaoa_func)
         else:
             raise 'Unknown search space'
         return Evaluator(ma_qaoa_func, num_angles)
@@ -84,7 +90,7 @@ class Evaluator:
         return Evaluator.wrap_parameter_strategy(func, num_qubits, driver_term_vals.shape[0], p, search_space)
 
     @staticmethod
-    def get_evaluator_standard_maxcut(graph: Graph, p: int, edge_list: list[tuple[int, int]] = None, search_space: str = 'ma') -> Evaluator:
+    def get_evaluator_standard_maxcut(graph: Graph, p: int, edge_list: list[tuple[int, int]] = None, search_space: str | SearchSpace = 'ma') -> Evaluator:
         """
         Returns an instance of general evaluator where the target function is the cut function and the driver function includes the existing edge terms only.
         :param graph: Graph for MaxCut problem.
@@ -209,9 +215,12 @@ class Evaluator:
         :param angles: Array of angles.
         :return: Expectation.
         """
+        global call_counter
         if len(angles) != self.num_angles:
             raise Exception('Wrong number of angles')
-        return self.func(angles)
+        call_counter += 1
+        result = self.func(angles)
+        return result
 
     def fix_params(self, inds, values):
         """
@@ -251,6 +260,8 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, 
     """
     if starting_angles is not None:
         num_restarts = 1
+        if len(starting_angles) != evaluator.num_angles:
+            raise Exception('Number of starting angles does not match evaluator')
 
     logger = logging.getLogger('QAOA')
     logger.debug('Optimization...')
