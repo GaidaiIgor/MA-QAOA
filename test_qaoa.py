@@ -4,7 +4,8 @@ QAOA tests.
 import networkx as nx
 import pytest
 
-from src.optimization import optimize_qaoa_angles, Evaluator
+from src.optimization import optimize_qaoa_angles
+from src.optimization.evaluator import Evaluator
 
 
 class TestMAQAOA:

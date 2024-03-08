@@ -11,10 +11,11 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
+from src.angle_strategies.basis_provider import BasisProviderRandom
+from src.angle_strategies.guess_provider import GuessProviderConstant, GuessProviderSeries
 from src.data_processing import merge_dfs, numpy_str_to_array
 from src.graph_utils import get_max_edge_depth, is_isomorphic
-from src.parallel import optimize_expectation_parallel, WorkerFourier, WorkerStandard, WorkerBaseQAOA, WorkerInterp, WorkerGreedy, WorkerMA, WorkerLinear, WorkerCombined, \
-    WorkerConstant
+from src.parallel import optimize_expectation_parallel, WorkerGreedy, WorkerSubspaceMA, WorkerQAOABase, WorkerIterativePerturb
 
 
 def generate_graphs():
@@ -78,77 +79,65 @@ def generate_graphs():
         nx.write_gml(graphs[i], f'{out_path}/{i}.gml')
 
 
-def init_dataframe(data_path: str, worker: WorkerBaseQAOA, out_path: str):
-    if worker.initial_guess_from is None:
+def init_dataframe(data_path: str, worker: WorkerQAOABase, out_path: str):
+    if not isinstance(worker.guess_provider, GuessProviderSeries):
         paths = [f'{data_path}/{i}.gml' for i in range(1000)]
-        df = DataFrame(paths).set_axis(['path'], axis=1).set_index('path')
-    elif isinstance(worker, (WorkerInterp, WorkerFourier, WorkerGreedy, WorkerCombined)) or hasattr(worker, 'guess_provider') and isinstance(worker.guess_provider, WorkerInterp):
-        df = pd.read_csv(f'{data_path}/output/{worker.search_space}/random/p_1/out.csv', index_col=0)
+        df = DataFrame(paths).set_axis(['path'], axis=1)
+    elif worker.search_space == 'ma':
+        df = pd.read_csv(f'{data_path}/output/qaoa/constant/0.2/out.csv')
+        df = df.filter(regex=r'p_\d+_angles')
+    elif isinstance(worker, (WorkerIterativePerturb, WorkerGreedy)):
+        df = pd.read_csv(f'{data_path}/output/{worker.search_space}/random/p_1/out.csv')
         prev_nfev = df.filter(regex=r'r_\d_nfev').sum(axis=1).astype(int)
         df = df.filter(regex='r_10').rename(columns=lambda name: f'p_1{name[4:]}')
         df['p_1_nfev'] += prev_nfev
-        if isinstance(worker, (WorkerInterp, WorkerFourier)):
-            df = df.rename(columns={'p_1_angles': 'p_1_angles_unperturbed'})
-            df['p_1_angles_best'] = df['p_1_angles_unperturbed']
-    elif isinstance(worker, WorkerMA):
-        df = pd.read_csv(f'{data_path}/output/qaoa/constant/0.2/out.csv', index_col=0)
-        # df = df.filter(regex=r'p_\d+_angles').rename(columns=lambda name: f'{name[:-7]}_starting_angles')
-        df = df.filter(regex=r'p_\d+_angles')
+        if isinstance(worker, WorkerIterativePerturb):
+            df['p_1_angles_unperturbed'] = df['p_1_angles']
     else:
         raise Exception('No init for this worker')
-    df.to_csv(out_path)
+    df.to_csv(out_path, index=False)
 
 
 def run_graphs_parallel():
     nodes = list(range(9, 10))
-    depths = list(range(3, 7))
-    ps = list(range(1, 9))
+    depths = list(range(3, 4))
+    ps = list(range(1, 2))
+    params_per_layer = list(range(1, 2))
 
     num_workers = 20
     convergence_threshold = 0.9995
     reader = partial(nx.read_gml, destringizer=int)
 
-    for p in ps:
-        out_path_suffix = 'output/qaoa/random/attempts_1/nfev/out.csv'
-        out_col = f'p_{p}'
-        initial_guess_from = None if p == 1 else f'p_{p - 1}'
-        initial_guess_from = f'p_{p}'
-        transfer_from = None if p == 1 else f'p_{p - 1}'
-        transfer_p = None if p == 1 else p - 1
+    for node in nodes:
+        node_depths = [3] if node < 12 else depths
+        for depth in node_depths:
+            for ppl in params_per_layer:
+                for p in ps:
+                    out_path_suffix = f'output/ma_subspace/random/ppl_{ppl}/out.csv'
+                    out_col = f'p_{p}'
+                    guess_provider = GuessProviderConstant()
+                    transfer_from = None if p == 1 else f'p_{p - 1}'
+                    transfer_p = None if p == 1 else p - 1
+                    basis_provider = BasisProviderRandom(num_dims=ppl * p)
+                    worker_subspace = WorkerSubspaceMA(out_col=out_col, reader=reader, p=p, guess_provider=guess_provider, transfer_from=transfer_from, transfer_p=transfer_p,
+                                                       basis_provider=basis_provider)
+                    worker = worker_subspace
 
-        worker_standard = WorkerStandard(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p, search_space='qaoa')
-        # worker_constant = WorkerConstant(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p)
-        # worker_tqa = WorkerLinear(reader=reader, p=p, out_col=out_col, initial_guess_from=None, transfer_from=transfer_from, transfer_p=transfer_p, search_space='tqa')
-        # worker_interp = WorkerInterp(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
-        # worker_fourier = WorkerFourier(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p, alpha=0.6)
-        # worker_greedy = WorkerGreedy(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p)
-        # worker_combined = WorkerCombined(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p,
-        #                                  workers=[worker_interp, worker_greedy], restart_shares=[0.5, 0.5])
-        # worker_ma = WorkerMA(reader=reader, p=p, out_col=out_col, initial_guess_from=initial_guess_from, transfer_from=transfer_from, transfer_p=transfer_p,
-        #                      guess_provider=None, guess_format='qaoa')
-        worker = worker_standard
+                    data_path = f'graphs/main/nodes_{node}/depth_{depth}/'
+                    out_path = data_path + out_path_suffix
 
-        for node in nodes:
-            node_depths = [3] if node < 12 else depths
-            for depth in node_depths:
-                data_path = f'graphs/main/nodes_{node}/depth_{depth}/'
-                out_path = data_path + out_path_suffix
+                    rows_func = lambda df: np.ones((df.shape[0], ), dtype=bool) if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
+                    # mask = np.zeros((1000, 1), dtype=bool)
+                    # mask[:] = True
+                    # rows_func = lambda df: mask
 
-                rows_func = lambda df: np.ones((df.shape[0], 1), dtype=bool) if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
-                # rows_func = lambda df: (df[f'p_{p - 1}'] < convergence_threshold) & (df[f'p_{p}'] - df[f'p_{p - 1}'] < 1e-3)
-                # rows_func = lambda df: (df[f'p_{p}'] < convergence_threshold) & ((df[f'p_{p}_nfev'] == 1000 * p) | (df[f'p_{p}'] < df[f'p_{p - 1}']))
+                    out_folder = path.split(out_path)[0]
+                    if not path.exists(out_folder):
+                        os.makedirs(path.split(out_path)[0])
+                    if not path.exists(out_path):
+                        init_dataframe(data_path, worker, out_path)
 
-                # mask = np.zeros((1000, 1), dtype=bool)
-                # mask[:] = True
-                # rows_func = lambda df: mask
-
-                out_folder = path.split(out_path)[0]
-                if not path.exists(out_folder):
-                    os.makedirs(path.split(out_path)[0])
-                if not path.exists(out_path):
-                    init_dataframe(data_path, worker, out_path)
-
-                optimize_expectation_parallel(out_path, rows_func, num_workers, worker)
+                    optimize_expectation_parallel(out_path, rows_func, num_workers, worker)
 
 
 def run_correct():
@@ -188,7 +177,7 @@ def run_merge():
 if __name__ == '__main__':
     np.set_printoptions(threshold=np.inf, linewidth=np.inf)
 
-    generate_graphs()
-    # run_graphs_parallel()
+    # generate_graphs()
+    run_graphs_parallel()
     # run_merge()
     # run_correct()

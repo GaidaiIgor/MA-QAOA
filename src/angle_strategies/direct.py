@@ -5,7 +5,6 @@ Functions that translate given parameters to MA-QAOA angles.
 import itertools as it
 
 import numpy as np
-from numpy import linalg
 from numpy import ndarray
 
 from src.data_processing import DiscreteSineTransform, DiscreteCosineTransform
@@ -197,65 +196,6 @@ def fix_angles(eval_func: callable, num_angles: int, inds: list[int], values: li
         full_angles[~mask] = angles
         return eval_func(full_angles)
     return new_func
-
-
-def gram_schmidt(vectors: ndarray) -> ndarray:
-    """
-    Orthonormalizes given set of linearly independent vectors.
-    :param vectors: Input set of vectors (in rows).
-    :return: Orthonormalized set.
-    """
-    ortho_vectors = np.copy(vectors)
-    for i in range(ortho_vectors.shape[0]):
-        for j in range(i):
-            ortho_vectors[i, :] -= np.dot(ortho_vectors[i, :], ortho_vectors[j, :]) * ortho_vectors[j, :]
-        if linalg.norm(ortho_vectors[i, :]) < 1e-10:
-            raise Exception(f'Vectors are linearly dependent at iteration {i}')
-        ortho_vectors[i, :] /= linalg.norm(ortho_vectors[i, :])
-    return ortho_vectors
-
-
-class SearchSpace:
-    """ Class that represents custom search spaces for MA-QAOA. """
-
-    def __init__(self, basis: ndarray, shift: ndarray):
-        """
-        Initializes instance. Orthonormalizes given basis by using Gram-Schmidt procedure.
-        :param basis: 2D array of custom basis set vectors (in rows) expressed over the original MA-QAOA search space.
-        :param shift: 1D array that shifts the origin the new basis.
-        """
-        self.basis = gram_schmidt(basis)
-        self.shift = shift
-
-    def augment_basis(self, num_dims: int):
-        """
-        Augments basis by adding num_dim random orthonormal vectors to the current basis. Uses Gram-Schmidt orthogonalization procedure.
-        :param num_dims: Desired number of extra dimensions.
-        :return: None, modifies self.basis.
-        """
-        assert self.basis.shape[1] - self.basis.shape[0] >= num_dims, 'Dimensionality cannot exceed the original space'
-        random_vectors = np.random.uniform(-1, 1, (num_dims, self.basis.shape[1]))
-        self.basis = gram_schmidt(np.concatenate((self.basis, random_vectors)))
-
-    def transform_coordinates(self, coordinates: ndarray) -> ndarray:
-        """
-        Transforms coordinates in this search space to the coordinates in the original space.
-        :param coordinates: 1D array of coordinates in the current search space. Length = self.basis.shape[0].
-        :return: 1D array of the corresponding coordinates in the original space. Length = self.basis.shape[1].
-        """
-        return self.shift + np.matmul(coordinates, self.basis)
-
-    def apply_interface(self, ma_qaoa_func: callable) -> callable:
-        """
-        Converts interface of a given function that expects MA-QAOA angles to angles in the current search space.
-        :param ma_qaoa_func: A function that expects MA-QAOA angles.
-        :return: Updated function that accepts angles in the current search space.
-        """
-        def search_space_wrapped(*args, **kwargs):
-            original_coordinates = self.transform_coordinates(args[0])
-            return ma_qaoa_func(original_coordinates, *args[1:], **kwargs)
-        return search_space_wrapped
-
 
 # def qaoa_scheme_decorator(ma_qaoa_func: callable, duplication_scheme: list[ndarray]) -> callable:
 #     """ Test decorator that uses custom duplication schemes. """

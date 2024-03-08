@@ -115,9 +115,9 @@ def evaluate_graph_cut_index_edge(index_edge_list: ndarray, num_nodes: int) -> n
     return res
 
 
-def evaluate_graph_cut(graph: Graph, edge_list: list[tuple[int, int]] = None) -> ndarray:
+def evaluate_all_cuts(graph: Graph, edge_list: list[tuple[int, int]] = None) -> ndarray:
     """
-    Evaluates sum of edge cuts for all specified edges.
+    Evaluates sum of edge cuts for all specified edges and all ways to split the vertices into two subsets.
     :param graph: Graph for evaluation.
     :param edge_list: List of edges that should be taken into account. If None, then all edges are taken into account.
     :return: 1D array of size 2 ** num_qubits with the cut values for each computational basis.

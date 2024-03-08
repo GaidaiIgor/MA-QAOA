@@ -1,33 +1,20 @@
-"""
-Functions related to optimization of QAOA angles.
-"""
+""" Module with Evaluator class. """
+
 from __future__ import annotations
 
-import logging
-import time
 from dataclasses import dataclass
 from typing import Callable
 
 import numpy as np
-import numpy.random as random
-import qiskit
-from matplotlib import pyplot as plt
 from networkx import Graph
 from numpy import ndarray
-from qiskit import converters
-from qiskit_aer.primitives import Estimator as AerEstimator
-from qiskit_ibm_runtime import Options, Session, QiskitRuntimeService, Estimator as IbmEstimator
-from scipy import optimize
-from scipy.optimize import OptimizeResult
 
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1
-from src.angle_strategies import qaoa_decorator, linear_decorator, tqa_decorator, fix_angles, fourier_decorator, SearchSpace
-from src.data_processing import normalize_qaoa_angles
+from src.angle_strategies.direct import tqa_decorator, qaoa_decorator, linear_decorator, fourier_decorator, fix_angles
+from src.angle_strategies.search_space import SearchSpace
 from src.graph_utils import get_index_edge_list
-from src.preprocessing import PSubset, evaluate_graph_cut, evaluate_z_term
+from src.preprocessing import evaluate_all_cuts, evaluate_z_term, PSubset
 from src.simulation.plain import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
-from src.simulation.qiskit_backend import get_observable_maxcut, get_qaoa_ansatz, evaluate_angles_ma_qiskit
-
 
 call_counter = 0
 
@@ -38,9 +25,15 @@ class Evaluator:
     Class representing evaluator for target function expectation.
     :var func: Function that takes 1D array of input parameters and evaluates target expectation.
     :var num_angles: Number of elements in the 1D array expected by func.
+    :var search_space: Name of the search space or instance of SearchSpace.
+    :var p: Number of QAOA layers.
     """
     func: Callable[[ndarray], float]
     num_angles: int
+    search_space: str | SearchSpace
+    p: int
+    num_qubits: int
+    num_driver_terms: int
 
     @staticmethod
     def wrap_parameter_strategy(ma_qaoa_func: callable, num_qubits: int, num_driver_terms: int, p: int, search_space: str | SearchSpace = 'ma') -> Evaluator:
@@ -53,28 +46,28 @@ class Evaluator:
         :param search_space: Name of the search space to use or SearchSpace instance for custom search spaces.
         :return: Simulation evaluator. The order of input parameters is according to the angle strategy.
         """
-        if search_space == 'general' or search_space == 'ma' or search_space == 'xqaoa':
-            num_angles = (num_driver_terms + num_qubits) * p
+        if search_space == 'tqa':
+            num_angles = 1
+            ma_qaoa_func = tqa_decorator(qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits), p)
+        elif search_space == 'linear':
+            num_angles = 4
+            ma_qaoa_func = linear_decorator(qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits), p)
         elif search_space == 'qaoa' or search_space == 'fourier':
             num_angles = 2 * p
             ma_qaoa_func = qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits)
             if search_space == 'fourier':
                 ma_qaoa_func = fourier_decorator(ma_qaoa_func)
-        elif search_space == 'linear':
-            num_angles = 4
-            ma_qaoa_func = linear_decorator(qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits), p)
-        elif search_space == 'tqa':
-            num_angles = 1
-            ma_qaoa_func = tqa_decorator(qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits), p)
+        elif search_space == 'ma' or search_space == 'general' or search_space == 'xqaoa':
+            num_angles = (num_driver_terms + num_qubits) * p
         elif isinstance(search_space, SearchSpace):
             num_angles = search_space.basis.shape[0]
             ma_qaoa_func = search_space.apply_interface(ma_qaoa_func)
         else:
             raise 'Unknown search space'
-        return Evaluator(ma_qaoa_func, num_angles)
+        return Evaluator(ma_qaoa_func, num_angles, search_space, p, num_qubits, num_driver_terms)
 
     @staticmethod
-    def get_evaluator_general(target_vals: ndarray, driver_term_vals: ndarray, p: int, search_space: str = 'ma') -> Evaluator:
+    def get_evaluator_general(target_vals: ndarray, driver_term_vals: ndarray, p: int, search_space: str = 'general') -> Evaluator:
         """
         Returns evaluator of target expectation calculated through simulation.
         :param target_vals: Values of the target function at each computational basis.
@@ -100,13 +93,13 @@ class Evaluator:
         :return: Simulation evaluator. The order of input parameters: first, edge angles for 1st layer in the order of graph.edges, then node angles for the 1st layer in the order
         of graph.nodes. Then the format repeats for the remaining p - 1 layers.
         """
-        target_vals = evaluate_graph_cut(graph, edge_list)
+        target_vals = evaluate_all_cuts(graph, edge_list)
         driver_term_vals = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
         return Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, search_space)
 
     @staticmethod
     def get_evaluator_general_subsets(num_qubits: int, target_terms: list[set[int]], target_coeffs: list[float], driver_terms: list[set[int]], p: int,
-                                      search_space: str = 'ma') -> Evaluator:
+                                      search_space: str = 'general') -> Evaluator:
         """
         Returns general evaluator that evaluates by separation into subsets corresponding to each target term.
         :param num_qubits: Total number of qubits in the problem.
@@ -154,61 +147,6 @@ class Evaluator:
             num_angles = 2
         return Evaluator(change_sign(func), num_angles)
 
-    @staticmethod
-    def get_evaluator_standard_maxcut_qiskit_simulator(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
-        """
-        Returns evaluator of maxcut expectation evaluated via qiskit's Aer simulator.
-        :param graph: Graph for maxcut.
-        :param p: Number of QAOA layers.
-        :param search_space: Name of the strategy to choose the number of variable parameters.
-        :return: Evaluator that computes maxcut expectation achieved by MA-QAOA with given angles.
-        The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
-        """
-        ansatz = get_qaoa_ansatz(graph, p)
-        observable = get_observable_maxcut(graph)
-
-        estimator = AerEstimator(approximation=True, run_options={'shots': 1024})
-        # backend = Aer.get_backend('aer_simulator')
-        # estimator = BackendEstimator(backend)
-
-        func = lambda angles: evaluate_angles_ma_qiskit(angles, ansatz, estimator, observable)
-        return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
-
-    @staticmethod
-    def get_evaluator_standard_maxcut_qiskit_hardware(graph: Graph, p: int, search_space: str = 'ma') -> Evaluator:
-        """
-        Returns qiskit evaluator of maxcut expectation evaluated via IBM's hardware.
-        :param graph: Graph for maxcut.
-        :param p: Number of QAOA layers.
-        :param search_space: Name of the strategy to choose the number of variable parameters.
-        :return: Evaluator that computes maxcut expectation achieved by MA-QAOA with given angles.
-        The order of input parameters is the same as in `get_evaluator_standard_maxcut`.
-        """
-        ansatz = get_qaoa_ansatz(graph, p)
-        observable = get_observable_maxcut(graph)
-        service = QiskitRuntimeService()
-        backend = service.get_backend('ibm_osaka')
-
-        ansatz_transpiled = qiskit.transpile(ansatz, backend, optimization_level=2)
-        dag = converters.circuit_to_dag(ansatz_transpiled)
-        idle_qubits = list(dag.idle_wires())
-        qubits_used = dag.num_qubits() - len(idle_qubits)
-        print(f'Qubits: {qubits_used}; Depth: {ansatz_transpiled.depth()}')
-        # ansatz = ansatz_transpiled
-        # observable = observable.apply_layout(ansatz_transpiled.layout)
-        # ansatz_transpiled.draw(output='mpl', style='iqp', idle_wires=False)
-        # plt.show()
-
-        session = Session(backend=backend)
-        options = Options()
-        options.transpilation.skip_transpilation = False
-        options.optimization_level = 2
-        options.resilience_level = 2
-        estimator = IbmEstimator(session=session, options=options)
-
-        func = lambda angles: evaluate_angles_ma_qiskit(angles, ansatz, estimator, observable)
-        return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
-
     def evaluate(self, angles: ndarray) -> float:
         """
         Evaluates expectation at the given angles.
@@ -242,55 +180,3 @@ def change_sign(func: callable) -> callable:
     def func_changed_sign(*args, **kwargs):
         return -func(*args, **kwargs)
     return func_changed_sign
-
-
-def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, method: str | callable = 'L-BFGS-B', num_restarts: int = 1, objective_max: float = None,
-                         objective_tolerance: float = 0.9995, normalize_angles: bool = True, **kwargs) -> OptimizeResult:
-    """
-    Wrapper around minimizer function that restarts optimization from multiple random starting points to minimize evaluator.
-    :param evaluator: Evaluator instance.
-    :param starting_angles: Starting point for optimization. Chosen randomly if None.
-    :param method: Optimization method.
-    :param num_restarts: Number of random starting points to try. Has no effect if specific starting point is provided.
-    :param objective_max: Maximum achievable objective. Optimization stops if answer sufficiently close to max_objective is achieved.
-    :param objective_tolerance: Fraction of 1 that controls how close the result need to be to objective_max before optimization can be stopped.
-    :param normalize_angles: True to return optimized angles to the [-pi; pi] range.
-    :param kwargs: Keyword arguments for optimizer.
-    :return: Minimization result.
-    """
-    if starting_angles is not None:
-        num_restarts = 1
-        if len(starting_angles) != evaluator.num_angles:
-            raise Exception('Number of starting angles does not match evaluator')
-
-    logger = logging.getLogger('QAOA')
-    logger.debug('Optimization...')
-    time_start = time.perf_counter()
-
-    result_best = None
-    for i in range(num_restarts):
-        if starting_angles is not None:
-            next_angles = starting_angles
-        else:
-            next_angles = random.uniform(-np.pi, np.pi, evaluator.num_angles)
-
-        result = optimize.minimize(change_sign(evaluator.func), next_angles, method=method, **kwargs)
-        if not result.success:
-            print(result.message)
-            result = optimize.minimize(change_sign(evaluator.func), next_angles, method='Nelder-Mead', **kwargs)
-            if not result.success:
-                print(result)
-                raise Exception('Optimization failed')
-
-        if normalize_angles:
-            result.x = normalize_qaoa_angles(result.x)
-
-        if result_best is None or result.fun < result_best.fun:
-            result_best = result
-
-        if objective_max is not None and -result_best.fun / objective_max > objective_tolerance:
-            break
-
-    time_finish = time.perf_counter()
-    logger.debug(f'Optimization done. Time elapsed: {time_finish - time_start}')
-    return result_best

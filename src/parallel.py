@@ -1,511 +1,537 @@
 import itertools as it
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from multiprocessing import Pool
 
-import networkx as nx
 import numpy as np
 import numpy.random as random
 import pandas as pd
-from natsort import natsort_keygen
+from networkx import Graph
 from numpy import ndarray
 from pandas import DataFrame, Series
+from scipy.optimize import OptimizeResult
 from tqdm import tqdm
 
-from src.angle_strategies import convert_angles_qaoa_to_ma, convert_angles_linear_to_qaoa, convert_angles_tqa_to_qaoa, interp_qaoa_angles, convert_angles_qaoa_to_fourier, \
-    convert_angles_fourier_to_qaoa
-from src.data_processing import numpy_str_to_array, transfer_expectation_columns, normalize_qaoa_angles
+from src.angle_strategies.direct import interp_qaoa_angles, convert_angles_qaoa_to_fourier, convert_angles_fourier_to_qaoa
+from src.angle_strategies.guess_provider import GuessProviderBase
+from src.angle_strategies.search_space import SearchSpace
+from src.angle_strategies.basis_provider import BasisProviderBase
+from src.data_processing import numpy_str_to_array, normalize_qaoa_angles
 from src.graph_utils import get_index_edge_list
-from src.optimization import Evaluator, optimize_qaoa_angles
-from src.preprocessing import evaluate_graph_cut, evaluate_z_term
+from src.optimization.optimization import optimize_qaoa_angles
+from src.optimization.optimization import Evaluator
+from src.preprocessing import evaluate_all_cuts, evaluate_z_term
 
 
 @dataclass(kw_only=True)
-class WorkerAbstract(ABC):
+class WorkerMaxCutBase(ABC):
     """
-    Base abstract worker class defining worker interface.
-    :var reader: Function that reads graph from the file.
+    Base class for a parallel worker solving MaxCut problem on given graphs.
+    :var out_col: Name of the output column for the main result.
     """
-    reader: callable
+    out_col: str
 
     @abstractmethod
-    def process_entry(self, entry: tuple[str, Series]) -> Series:
+    def process_job_item(self, job_item: tuple[bool, Series]) -> Series:
         """
-        Performs work on a given dataframe row and returns the row extended with the work results.
-        :param entry: 1) Path to graph file; 2) Series of graph attributes (dataframe row).
+        Solves MaxCut described by a given dataframe row and returns the row extended with the work results (if applicable).
+        :param job_item: 1) Whether current job item has to be processed or not 2) Series of graph properties and calculation results (dataframe row).
         :return: Series extended with work results.
         """
         pass
 
 
 @dataclass(kw_only=True)
-class WorkerBaseQAOA(WorkerAbstract, ABC):
+class WorkerExplicit(WorkerMaxCutBase, ABC):
     """
-    Base abstract QAOA worker class implementing common postprocessing and attributes for QAOA workers.
-    :var search_space: Name of angle search space (general, ma, qaoa, fourier, linear, tqa).
-    :var p: Number of QAOA layers.
-    :var out_col: Name of the output column for AR.
-    :var initial_guess_from: Name of the primary column from where the corresponding angles will be taken as initial guess or None for random angles.
-    :var transfer_from: Name of the column from where expectation should be copied if it was not calculated in the current round (=nan).
-    :var transfer_p: Value of p for the copy column. If current p is different, the copied angles will be appended with 0 to keep the angle format consistent.
+    Base class for workers that perform the work themselves, i.e. do not use other workers.
+    :var reader: Function that reads graph from a file.
     """
-    search_space: str
-    p: int
-    out_col: str
-    initial_guess_from: str | None = None
-    transfer_from: str | None = None
-    transfer_p: int | None = None
-
-    def cast_nfev_to_int(self, dataframe: DataFrame) -> DataFrame:
-        """
-        Converts nan values of nfev to 0 and converts the data type to int.
-        :param dataframe: Dataframe to process.
-        :return: Converted dataframe.
-        """
-        dataframe[self.out_col + '_nfev'] = dataframe[self.out_col + '_nfev'].apply(lambda x: 0 if np.isnan(x) else x).apply(int)
-        return dataframe
-
-    def postprocess_dataframe(self, dataframe: DataFrame) -> DataFrame:
-        """
-        Transfers missing or better expectations from the previous p. Updates angles to match the format of current p.
-        :param dataframe: Dataframe with the current p calculations.
-        :return: Updated dataframe with copies expectations and angles.
-        """
-        if self.transfer_from is not None:
-            dataframe = transfer_expectation_columns(dataframe, self.transfer_from, self.out_col, ['_angles'], self.transfer_p, self.p, True)
-        dataframe = self.cast_nfev_to_int(dataframe)
-        return dataframe
+    reader: callable
 
 
 @dataclass(kw_only=True)
-class WorkerGeneral(WorkerBaseQAOA):
+class WorkerMaxCutBruteForce(WorkerExplicit):
+    """ Worker that evaluates maxcut by brute-force and saves it as a graph property (does not modify input series). """
+
+    def process_job_item(self, job_item: tuple[bool, Series]) -> Series:
+        execute, series = job_item
+        if not execute:
+            return series
+
+        graph = self.reader(series['path'])
+        cut_vals = evaluate_all_cuts(graph)
+        max_cut = int(max(cut_vals))
+
+        graph.graph['max_cut'] = max_cut
+        return series
+
+
+@dataclass(kw_only=True)
+class WorkerQAOABase(WorkerExplicit, ABC):
     """
-    Implements entry processing with Generalized QAOA.
-    :var space_type: Type of search space. 1 - All first order terms; 12 - All 1st and 2nd order terms; 12e - All 1st order and 2nd order only for existing edges.
+    Base class for workers that solve MaxCut optimization with QAOA-like methods.
+    :var p: Number of QAOA layers.
+    :var search_space: Name of known search space or instance of SearchSpace class.
+    :var guess_provider: Guess provider for the initial guess.
+    :var transfer_from: Name of the main column (AR) with the data for a smaller number of layers to compare for transfer.
+    :var transfer_p: Number of layers (p) in the transferred data. If the current p is different, the copied angles will be appended with 0 to keep the angle format consistent.
     """
-    search_space: str = field(init=False)
-    space_type: str
+    p: int
+    search_space: str | SearchSpace
+    guess_provider: GuessProviderBase
+    transfer_from: str | None = None
+    transfer_p: int | None = None
+
+    def get_evaluator(self, graph: Graph, search_space: str | SearchSpace = None) -> Evaluator:
+        """
+        Returns evaluator appropriate for the current class.
+        :param graph: Graph for MaxCut evaluation.
+        :param search_space: Custom search space, or None to use self.search_space.
+        :return: Evaluator.
+        """
+        if search_space is None:
+            search_space = self.search_space
+        return Evaluator.get_evaluator_standard_maxcut(graph, self.p, search_space=search_space)
+
+    def get_initial_angles(self, evaluator: Evaluator, series: Series, guess_provider: GuessProviderBase = None) -> ndarray:
+        """
+        Returns initial angles from the given series, or None if the angle column is unspecified. Converts angles if guess format and search space mismatch for known conversions.
+        The number of layers in the guess has to match the current number of layers.
+        :param evaluator: Evaluator for which a guess is generated.
+        :param series: Series to extract the angles from.
+        :param guess_provider: Custom guess provider, or None ot use self.guess_provider.
+        :return: Initial angles for optimization.
+        """
+        if guess_provider is None:
+            guess_provider = self.guess_provider
+        initial_angles = guess_provider.provide_guess(evaluator, series)
+        return initial_angles
+
+    def optimize_angles(self, evaluator: Evaluator, starting_angles: ndarray) -> OptimizeResult:
+        """
+        Optimizes angles.
+        :param evaluator: Expectation evaluator.
+        :param starting_angles: Starting angles for optimization.
+        :return: Optimization result.
+        """
+        optimization_result = optimize_qaoa_angles(evaluator, starting_angles=starting_angles)
+        return optimization_result
+
+    def write_standard(self, series: Series, optimization_result: OptimizeResult):
+        """
+        Writes standard information from the optimization result into series.
+        :param series: Series for writing.
+        :param optimization_result: Optimization result for writing.
+        """
+        if optimization_result is not None:
+            graph = self.reader(series['path'])
+            series[self.out_col] = optimization_result.fun / graph.graph['maxcut']
+            series[self.out_col + '_angles'] = optimization_result.x
+            series[self.out_col + '_nfev'] = optimization_result.nfev
+
+    def transfer_angles(self, series: Series, angle_suffix: str):
+        """
+        Transfers angles from a previous layer to the current layer, by augmenting with the appropriate number of zeros at the end.
+        :param series: Data series with angles.
+        :param angle_suffix: Suffix of angle record.
+        :return: Updated series.
+        """
+        p_diff = self.p - self.transfer_p
+        transfer_angles = numpy_str_to_array(series[self.transfer_from + angle_suffix])
+        angles_per_layer = len(transfer_angles) // self.transfer_p
+        transfer_angles = np.concatenate((transfer_angles, [0] * angles_per_layer * p_diff))
+        series[self.out_col + angle_suffix] = transfer_angles
+
+    def transfer_record(self, series: Series):
+        """
+        Transfers data from the comparison record if its result is better than the current result.
+        :param series: Current data series.
+        :return: Updated data series.
+        """
+        if self.transfer_from is None:
+            return
+        if self.out_col not in series or series[self.out_col] < series[self.transfer_from]:
+            series[self.out_col] = series[self.transfer_from]
+            self.transfer_angles(series, '_angles')
+        if self.out_col + '_nfev' not in series:
+            series[self.out_col + '_nfev'] = 0
+
+    def update_series(self, series: Series, optimization_result: OptimizeResult | None) -> Series:
+        """
+        Updates given series with given optimization results.
+        :param series: Series of graph properties and calculation results (dataframe row).
+        :param optimization_result: Optimization result.
+        :return: Updated series.
+        """
+        new_series = series.copy()
+        self.write_standard(new_series, optimization_result)
+        self.transfer_record(new_series)
+        return new_series
+
+    def process_job_item(self, job_item: tuple[bool, Series]) -> Series:
+        """ Runs standard optimization and writes the results to the given series. """
+        optimize, series = job_item
+        if optimize:
+            path = series['path']
+            graph = self.reader(path)
+            evaluator = self.get_evaluator(graph)
+            starting_angles = self.get_initial_angles(evaluator, series)
+            try:
+                optimization_result = self.optimize_angles(evaluator, starting_angles)
+            except Exception:
+                raise Exception(f'Optimization failed at {path}')
+        else:
+            optimization_result = None
+        new_series = self.update_series(series, optimization_result)
+        return new_series
+
+
+@dataclass(kw_only=True)
+class WorkerStandard(WorkerQAOABase):
+    """ Implements standard processing. """
 
     def __post_init__(self):
-        self.search_space = 'general'
-        if self.space_type != '1' and self.search_space != '12' and self.search_space != '12e':
-            raise Exception('Space type has to be 1 or 12 or 12e for WorkerGeneral')
+        assert np.any(self.search_space == np.array(['tqa', 'linear', 'qaoa', 'fourier', 'ma'])) or isinstance(self.search_space, SearchSpace), \
+            'search_space can be tqa, linear, qaoa, fourier, ma, or an instance of SearchSpace for this worker'
 
-    def process_entry(self, entry: tuple[str, Series]) -> Series:
-        """
-        Worker function for Generalized QAOA.
-        :param entry: 1) Path to graph file; 2) Series of graph attributes.
-        :return: Updated series with added expectation, angles and number of function evaluations for this p.
-        """
-        path, series = entry
-        starting_point = None if self.initial_guess_from is None else numpy_str_to_array(series[self.initial_guess_from + '_angles'])
-        graph = self.reader(path)
 
-        target_vals = evaluate_graph_cut(graph)
+@dataclass(kw_only=True)
+class WorkerGeneral(WorkerQAOABase):
+    """
+    Implements MaxCut optimization with Generalized QAOA.
+    :var search_space_type: Describes what terms should be used to construct the driver Hamiltonian.
+    1 uses all first-order terms, 12 - all first and second-order terms, 12e - all first and second corresponding to the existing edges in graph only.
+    """
+    search_space: str = 'general'
+    search_space_type: str
+
+    def __post_init__(self):
+        assert self.search_space == 'general', 'search space has to be general for this worker'
+        assert np.any(self.search_space_type == np.array(['1', '12', '12e'])), 'search space type can be 1 or 12 or 12e for this worker'
+
+    def get_evaluator(self, graph: Graph) -> Evaluator:
+        target_vals = evaluate_all_cuts(graph)
         driver_term_vals = np.array([evaluate_z_term(np.array(term), len(graph)) for term in it.combinations(range(len(graph)), 1)])
-
-        if self.space_type != '1':
-            if self.space_type == '12':
+        if self.search_space_type != '1':
+            if self.search_space_type == '12':
                 driver_term_vals_2 = np.array([evaluate_z_term(np.array(term), len(graph)) for term in it.combinations(range(len(graph)), 2)])
-            if self.space_type == '12e':
+            if self.search_space_type == '12e':
                 driver_term_vals_2 = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
             driver_term_vals = np.append(driver_term_vals, driver_term_vals_2, axis=0)
 
-        evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, self.p)
-        result = optimize_qaoa_angles(evaluator, starting_angles=starting_point)
-
-        series[self.out_col] = -result.fun / graph.graph['maxcut']
-        series[self.out_col + '_angles'] = result.x
-        series[self.out_col + '_nfev'] = result.nfev
-        return series
+        evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, self.p, self.search_space)
+        return evaluator
 
 
 @dataclass(kw_only=True)
 class WorkerGeneralSub(WorkerGeneral):
-    """ Implements entry processing with Generalized QAOA on subgraphs. """
+    """ Implements MaxCut optimization with Generalized QAOA on subgraphs generated by each edge (lightcones). """
 
-    def process_entry(self, entry: tuple[str, Series]) -> Series:
-        path, series = entry
-        starting_point = None if self.initial_guess_from is None else numpy_str_to_array(series[self.initial_guess_from + '_angles'])
-        graph = self.reader(path)
-
+    def get_evaluator(self, graph: Graph) -> Evaluator:
         target_terms = [set(edge) for edge in get_index_edge_list(graph)]
         target_term_coeffs = [-1 / 2] * len(graph.edges) + [len(graph.edges) / 2]
 
         driver_terms = [set(term) for term in it.combinations(range(len(graph)), 1)]
-        if self.space_type == '12':
+        if self.search_space_type == '12':
             driver_terms += [set(term) for term in it.combinations(range(len(graph)), 2)]
-        if self.space_type == '12e':
+        elif self.search_space_type == '12e':
             driver_terms += [set(term) for term in get_index_edge_list(graph)]
 
-        evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, self.p)
-        result = optimize_qaoa_angles(evaluator, starting_angles=starting_point)
-
-        series[self.out_col] = -result.fun / graph.graph['maxcut']
-        series[self.out_col + '_angles'] = result.x
-        series[self.out_col + '_nfev'] = result.nfev
-        return series
+        evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, self.p, self.search_space)
+        return evaluator
 
 
 @dataclass(kw_only=True)
-class WorkerStandard(WorkerBaseQAOA):
-    """ Implements standard processing with plain or random starting angles. """
-
-    def provide_guess(self, *args, **kwargs):
-        """ Provides guess for the starting angles. """
-        raise Exception('Unimplemented')
-
-    def process_entry_core(self, path: str, search_space: str = None, **optimize_args) -> tuple:
-        """
-        Processes entry with plain input and output arguments.
-        :param path: Path to graph file.
-        :param search_space: Custom search space or None to use self.search_space.
-        :param optimize_args: Additional arguments for optimization function.
-        :return: 1) Approximation ratio; 2) Corresponding angles; 3) Number of function evaluations.
-        """
-        if search_space is None:
-            search_space = self.search_space
-
-        graph = self.reader(path)
-        evaluator = Evaluator.get_evaluator_standard_maxcut(graph, self.p, search_space=search_space)
-        maxint = np.iinfo(np.int32).max
-        options = {'maxiter': maxint, 'maxfun': maxint}
-
-        try:
-            result = optimize_qaoa_angles(evaluator, options=options, **optimize_args)
-        except Exception:
-            raise Exception(f'Optimization failed at {path}')
-        return -result.fun / graph.graph['maxcut'], result.x, result.nfev
-
-    def process_entry(self, entry: tuple[str, Series]) -> Series:
-        path, series = entry
-        starting_angles = None if self.initial_guess_from is None else numpy_str_to_array(series[self.initial_guess_from + '_angles'])
-        ar, angles, nfev = self.process_entry_core(path, starting_angles)
-        series[self.out_col] = ar
-        series[self.out_col + '_angles'] = angles
-        series[self.out_col + '_nfev'] = nfev
-        return series
-
-
-@dataclass(kw_only=True)
-class WorkerConstant(WorkerStandard):
-    """ Worker that tries to start from constant values with opposite signs for gamma and beta. """
-    search_space: str = field(init=False)
+class WorkerSubspaceMA(WorkerQAOABase):
+    """
+    Worker that searches through subspaces of MA-QAOA.
+    :var basis_provider: Object that provides search basis.
+    """
+    search_space: str = 'ma_subspace'
+    basis_provider: BasisProviderBase
 
     def __post_init__(self):
-        self.search_space = 'qaoa'
+        assert self.search_space == 'ma_subspace', 'Search space can only be ma_subspace for WorkerSubspaceMA'
 
-    def provide_guess(self, **kwargs):
-        gammas = [0.2] * self.p
-        betas = [-0.2] * self.p
-        starting_angles = np.array(list(it.chain(*zip(gammas, betas))))
-        return starting_angles
-
-    def process_entry(self, entry: tuple[str, Series]) -> Series:
-        path, series = entry
-        starting_angles = self.provide_guess()
-        ar, angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=starting_angles)
-        series[self.out_col] = ar
-        series[self.out_col + '_angles'] = angles
-        series[self.out_col + '_nfev'] = nfev
-        return series
-
-
-@dataclass(kw_only=True)
-class WorkerLinear(WorkerStandard):
-    """
-    Worker that implements linear angle initialization strategies (linear and tqa).
-    :var num_attempts: Number of optimization attempts.
-    """
-    num_attempts: int = 1
-
-    def __post_init__(self):
-        if self.search_space != 'linear' and self.search_space != 'tqa':
-            raise Exception('Search space must be linear or tqa for WorkerLinear')
-
-    def process_entry(self, entry: tuple[str, Series]) -> Series:
-        path, series = entry
-        optimization_results = []
-        tried_angles = []
-        similarity_threshold = 1e-3
-        for i in range(self.num_attempts):
-            _, linear_angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=None)
-            while True:
-                angle_diff = np.array([max(abs(linear_angles - angles)) for angles in tried_angles])
-                if len(angle_diff) == 0 or any(angle_diff > similarity_threshold):
-                    break
-                linear_angles = random.uniform(-np.pi, np.pi, len(linear_angles))
-            tried_angles.append(linear_angles)
-
-            if self.search_space == 'tqa':
-                qaoa_angles = convert_angles_tqa_to_qaoa(linear_angles, self.p)
-            elif self.search_space == 'linear':
-                qaoa_angles = convert_angles_linear_to_qaoa(linear_angles, self.p)
-
-            result = list(WorkerStandard.process_entry_core(self, path, 'qaoa', starting_angles=qaoa_angles))
-            result[2] += nfev
-            optimization_results.append(result)
-
-        df = DataFrame(optimization_results)
-        best_ind = np.argmax(df.iloc[:, 0])
-        series[self.out_col] = df.iloc[best_ind, 0]
-        series[self.out_col + '_angles'] = df.iloc[best_ind, 1]
-        series[self.out_col + '_nfev'] = sum(df.iloc[:, 2])
-        return series
+    def process_job_item(self, job_item: tuple[bool, Series]) -> Series:
+        optimize, series = job_item
+        if optimize:
+            path = series['path']
+            graph = self.reader(path)
+            evaluator_ma = self.get_evaluator(graph, 'ma')
+            basis = self.basis_provider.provide_basis(evaluator_ma)
+            shift = self.get_initial_angles(evaluator_ma, series)
+            search_space = SearchSpace(basis, shift)
+            evaluator = self.get_evaluator(graph, search_space)
+            initial_angles = np.array([0] * evaluator.num_angles)
+            try:
+                optimization_result = self.optimize_angles(evaluator, initial_angles)
+                optimization_result.x = search_space.transform_coordinates(optimization_result.x)
+            except Exception:
+                raise Exception(f'Optimization failed at {path}')
+        else:
+            optimization_result = None
+        new_series = self.update_series(series, optimization_result)
+        return new_series
 
 
 @dataclass(kw_only=True)
-class WorkerIterativePerturb(WorkerStandard):
+class WorkerMultipleRepeats(WorkerQAOABase, ABC):
     """
-    Worker that implements the common functionality for iterative generation of the initial guess for next p with perturbations.
-    The angle extension function has to be implemented by a child.
+    Worker that implements multiple repeats with different starting guesses.
+    :var num_repeats: Number of repeats.
+    """
+    num_repeats: int
+
+    @abstractmethod
+    def get_initial_angles_all(self, evaluator: Evaluator, series: Series) -> ndarray:
+        """
+        Returns a 2D array where each row is an initial guess for optimization.
+        :param evaluator: Evaluator for which initial angles are generated.
+        :param series: Input series with graph properties.
+        :return: 2D array of size self.num_repeats x number of angles in the current search space.
+        """
+        pass
+
+    def update_series(self, series: Series, optimization_results: list[OptimizeResult] | None) -> Series:
+        """
+        Updates the series based on information from all optimization attempts.
+        :param series: Series to update.
+        :param optimization_results: List of optimization results from all attempts.
+        :return: Updated series.
+        """
+        best_result = max(optimization_results, key=lambda result: result.fun) if optimization_results is not None else None
+        updated_series = WorkerQAOABase.update_series(self, series, best_result)
+        if optimization_results is not None:
+            total_nfev = sum([result.nfev for result in optimization_results])
+            updated_series[self.out_col + '_nfev'] = total_nfev
+        return updated_series
+
+    def process_job_item(self, job_item: tuple[bool, Series]) -> Series:
+        optimize, series = job_item
+        if optimize:
+            path = series['path']
+            graph = self.reader(path)
+            evaluator = self.get_evaluator(graph)
+
+            optimization_results = [None] * self.num_repeats
+            initial_angles = self.get_initial_angles_all(evaluator, series)
+            for i in range(self.num_repeats):
+                try:
+                    optimization_results[i] = self.optimize_angles(evaluator, initial_angles[i, :])
+                except Exception:
+                    raise Exception(f'Optimization failed at {path}')
+        else:
+            optimization_results = None
+        new_series = self.update_series(series, optimization_results)
+        return new_series
+
+
+@dataclass(kw_only=True)
+class WorkerIterativePerturb(WorkerMultipleRepeats, ABC):
+    """
+    Worker that implements iterative generation of the initial guess for next layer with perturbations.
     :var alpha: Perturbation multiplier coefficient.
-    :var num_attempts: Number of optimization attempts.
+    :var guess_provider_unperturbed:
     """
     alpha: float
-    num_attempts: int = 1
+    guess_provider_unperturbed: GuessProviderBase
 
     def __post_init__(self):
-        if self.p < 2:
-            raise Exception('p has to be > 1 for iterative workers')
+        assert self.p > 1, 'p has to be > 1 for this worker'
 
-    def process_entry_core(self, path: str, starting_angles: ndarray, angles_unperturbed: ndarray = None, num_attempts: int = None) -> list:
+    @abstractmethod
+    def extend_angles(self, angles: ndarray) -> ndarray:
         """
-        Core functionality of process_entry with plain input and output arguments instead of a series.
-        :param path: Path to the graph file.
-        :param starting_angles: Best overall angles from the previous layer.
-        :param angles_unperturbed: Best unperturbed angles from the previous layer.
-        :param num_attempts: Number of attempts, or None to use self.num_attempts.
-        :return: 1) Best AR; 2) Best angles; 3) Total number of function evaluations; 4) Optimized unperturbed angles for this layer (if given).
+        Returns initial guess for the current layer based on the given angles for the previous layer.
+        :param angles: Angles for the previous layer.
+        :return: Angles extended for the current layer.
         """
-        if num_attempts is None:
-            num_attempts = self.num_attempts
-        normalize_angles = self.search_space != 'fourier'
-        perturbations_start = 1 if angles_unperturbed is None or all(angles_unperturbed == starting_angles) else 2
+        pass
 
-        optimization_results = []
-        for i in range(num_attempts):
-            next_starting_angles = angles_unperturbed if angles_unperturbed is not None and i == 0 else starting_angles
-            if i >= perturbations_start:
-                perturbation = self.alpha * random.normal(scale=abs(next_starting_angles))
-                next_starting_angles += perturbation
-            next_starting_angles = self.provide_guess(next_starting_angles)
-            result = WorkerStandard.process_entry_core(self, path, starting_angles=next_starting_angles, normalize_angles=normalize_angles)
-            optimization_results.append(result)
+    def get_initial_angles_all(self, evaluator: Evaluator, series: Series) -> ndarray:
+        """ Extends existing angles to find a good guess for the next layer. """
+        angles_unperturbed = WorkerQAOABase.get_initial_angles(self, evaluator, series, self.guess_provider_unperturbed)
+        angles_best = WorkerQAOABase.get_initial_angles(self, evaluator, series)
+        initial_angles_all = [None] * self.num_repeats
+        perturb_start = 1 if np.allclose(angles_unperturbed, angles_best) else 2
+        for i in range(self.num_repeats):
+            initial_angles_all[i] = angles_unperturbed if i == 0 else angles_best
+            if i >= perturb_start:
+                perturbation = self.alpha * random.normal(scale=abs(initial_angles_all[i]))
+                initial_angles_all[i] += perturbation
+            initial_angles_all[i] = self.extend_angles(initial_angles_all[i])
+        initial_angles_all = np.array(initial_angles_all)
+        return initial_angles_all
 
-        df = DataFrame(optimization_results)
-        best_ind = np.argmax(df.iloc[:, 0])
-        best_result = [df.iloc[best_ind, 0], df.iloc[best_ind, 1], sum(df.iloc[:, 2])]
-        if angles_unperturbed is not None:
-            best_result += [df.iloc[0, 1]]
-        return best_result
-
-    def process_entry(self, entry: tuple[str, Series]) -> Series:
-        path, series = entry
-        if self.initial_guess_from + '_angles_unperturbed' in series:
-            angles_unperturbed = numpy_str_to_array(series[self.initial_guess_from + '_angles_unperturbed'])
-            angle_suffix = '_angles_best'
-        else:
-            angles_unperturbed = None
-            angle_suffix = '_angles'
-        angles_best = numpy_str_to_array(series[self.initial_guess_from + angle_suffix])
-
-        if self.search_space == 'fourier':
-            if angles_unperturbed is not None:
-                angles_unperturbed = convert_angles_qaoa_to_fourier(angles_unperturbed)
-            angles_best = convert_angles_qaoa_to_fourier(angles_best)
-        result = list(self.process_entry_core(path, angles_best, angles_unperturbed))
-        if self.search_space == 'fourier':
-            if angles_unperturbed is not None:
-                result[3] = normalize_qaoa_angles(convert_angles_fourier_to_qaoa(result[3]))
-            result[1] = normalize_qaoa_angles(convert_angles_fourier_to_qaoa(result[1]))
-
-        series[self.out_col] = result[0]
-        series[self.out_col + angle_suffix] = result[1]
-        series[self.out_col + '_nfev'] = result[2]
-        if self.initial_guess_from + '_angles_unperturbed' in series:
-            series[self.out_col + '_angles_unperturbed'] = result[3]
-        return series
-
-    def postprocess_dataframe(self, dataframe: DataFrame) -> DataFrame:
-        if self.transfer_from is not None:
-            angle_suffixes = ['_angles_unperturbed', '_angles_best'] if self.transfer_from + '_angles_unperturbed' in dataframe else ['_angles']
-            dataframe = transfer_expectation_columns(dataframe, self.transfer_from, self.out_col, angle_suffixes, self.transfer_p, self.p, True)
-        self.cast_nfev_to_int(dataframe)
-        return dataframe
+    def update_series(self, series: Series, optimization_results: list[OptimizeResult] | None) -> Series:
+        """
+        Updates series with optimization results.
+        :param series: Series.
+        :param optimization_results: Tuple with best and unperturbed optimization results.
+        :return: Updated series.
+        """
+        new_series = WorkerMultipleRepeats.update_series(self, series, optimization_results)
+        new_series[self.out_col + '_angles_unperturbed'] = optimization_results[0].x
+        return new_series
 
 
 @dataclass(kw_only=True)
 class WorkerInterp(WorkerIterativePerturb):
     """ Worker for Interp initialization strategy for QAOA. """
-    search_space: str = field(init=False)
+    search_space: str = 'qaoa'
 
     def __post_init__(self):
-        super().__post_init__()
-        self.search_space = 'qaoa'
+        WorkerIterativePerturb.__post_init__(self)
+        assert self.search_space == 'qaoa', 'search space has to be qaoa for this worker'
 
-    def provide_guess(self, angles: ndarray) -> ndarray:
+    def extend_angles(self, angles: ndarray) -> ndarray:
         return interp_qaoa_angles(angles, self.p - 1)
 
 
 @dataclass(kw_only=True)
 class WorkerFourier(WorkerIterativePerturb):
     """ Worker function for Fourier initialization strategy for QAOA. """
-    search_space: str = field(init=False)
+    search_space: str = 'fourier'
 
     def __post_init__(self):
-        super().__post_init__()
-        self.search_space = 'fourier'
+        WorkerIterativePerturb.__post_init__(self)
+        assert self.search_space == 'fourier', 'search space has be to fourier for this worker'
 
-    def provide_guess(self, angles: ndarray) -> ndarray:
+    def get_initial_angles_all(self, evaluator: Evaluator, series: Series):
+        initial_angles_all = WorkerIterativePerturb.get_initial_angles_all(self, evaluator, series)
+        for i in range(initial_angles_all.shape[0]):
+            initial_angles_all[i, :] = convert_angles_qaoa_to_fourier(initial_angles_all[i, :])
+        return initial_angles_all
+
+    def extend_angles(self, angles: ndarray) -> ndarray:
         return np.concatenate((angles, [0] * 2))
 
+    def optimize_angles(self, evaluator: Evaluator, starting_angles: ndarray) -> OptimizeResult:
+        optimization_result = optimize_qaoa_angles(evaluator, starting_angles=starting_angles, normalize_angles=False)
+        return optimization_result
 
-@dataclass(kw_only=True)
-class WorkerGreedy(WorkerStandard):
-    """
-    Worker that implements greedy strategy for QAOA (p + 1 optimizations from transition states).
-    :var num_attempts: Number of optimization attempts.
-    """
-    search_space: str = field(init=False)
-    num_attempts: int = 1
-
-    def __post_init__(self):
-        if self.p < 2:
-            raise Exception('p has to be > 1 for WorkerGreedy')
-        self.search_space = 'qaoa'
-
-    def process_entry_core(self, path: str, starting_angles: ndarray, num_attempts: int = None) -> tuple:
-        """
-        Core functionality of process_entry with plain input and output arguments instead of a series.
-        :param path: Path to the graph file.
-        :param starting_angles: Starting angles for optimization.
-        :param num_attempts: Number of optimization attempts, or None to use self.num_attempts.
-        :return: 1) Best found AR; 2) Corresponding angles; 3) Total number of function evaluations.
-        """
-        if num_attempts is None:
-            num_attempts = self.num_attempts
-        selected_transitions = random.choice(np.arange(self.p), num_attempts, False)
-        best_ar = 0
-        best_angles = None
-        total_nfev = 0
-        for transition_ind in selected_transitions:
-            next_transition_state = np.concatenate((starting_angles[:2 * transition_ind], [0] * 2, starting_angles[2 * transition_ind:]))
-            next_ar, next_angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=next_transition_state, method='Nelder-Mead')
-            total_nfev += nfev
-            if best_ar < next_ar:
-                best_ar = next_ar
-                best_angles = next_angles
-        return best_ar, best_angles, total_nfev
-
-    def process_entry(self, entry: tuple[str, Series]) -> Series:
-        path, series = entry
-        starting_angles = numpy_str_to_array(series[self.initial_guess_from + '_angles'])
-        ar, angles, nfev = self.process_entry_core(path, starting_angles)
-        series[self.out_col] = ar
-        series[self.out_col + '_angles'] = angles
-        series[self.out_col + '_nfev'] = nfev
-        return series
+    def update_series(self, series: Series, optimization_results: list[OptimizeResult] | None) -> Series:
+        if optimization_results is not None:
+            for i in range(len(optimization_results)):
+                optimization_results[i].x = normalize_qaoa_angles(convert_angles_fourier_to_qaoa(optimization_results[i].x))
+        return WorkerIterativePerturb.update_series(self, series, optimization_results)
 
 
 @dataclass(kw_only=True)
-class WorkerCombined(WorkerStandard):
-    """
-    Worker that executes multiple other workers.
-    :var workers: List of workers to try. Each worker must implement process_entry_core(path, previous_p_best_angles, num_attempts).
-    :var attempt_shares: Share of self.num_attempts of each worker.
-    """
-    search_space: str = field(init=False)
-    num_attempts: int = 1
-    workers: list[WorkerStandard]
-    attempt_shares: list[float]
+class WorkerGreedy(WorkerMultipleRepeats):
+    """ Worker that implements greedy strategy for QAOA (optimizations from transition states). """
+    search_space: str = 'qaoa'
 
     def __post_init__(self):
-        if len(self.workers) != len(self.attempt_shares):
-            raise Exception('The lengths of workers and restart_shares must be the same')
-        self.search_space = 'qaoa'
+        assert self.p > 1, 'p has to be > 1 for WorkerGreedy'
+        assert self.search_space == 'qaoa', 'search space has to be qaoa for WorkerGreedy'
 
-    @staticmethod
-    def distribute_attempts(num_attempts: int, desired_fractions: list) -> ndarray:
-        """
-        Distributes the specified number of attempts between methods trying to respect the specified fractions for each method.
-        :param num_attempts: Total number of attempts.
-        :param desired_fractions: Fraction of attempts for each method.
-        :return: Number of attempts for each method.
-        """
-        method_attempts = np.zeros_like(desired_fractions, dtype=int)
-        for i in range(num_attempts):
-            errors = abs(method_attempts / num_attempts - desired_fractions)
-            highest_error = np.argmax(errors)
-            method_attempts[highest_error] += 1
-        return method_attempts
+    def get_initial_angles_all(self, evaluator: Evaluator, series: Series) -> ndarray:
+        angles_per_layer = 2
+        initial_angles = WorkerQAOABase.get_initial_angles(self, evaluator, series)
+        selected_transitions = random.choice(np.arange(self.p), self.num_repeats, False)
+        initial_angles_all = [None] * self.num_repeats
+        for i, transition_ind in enumerate(selected_transitions):
+            initial_angles_all[i] = np.concatenate((initial_angles[:angles_per_layer * transition_ind], [0] * angles_per_layer, initial_angles[angles_per_layer * transition_ind:]))
+        return np.array(initial_angles_all)
 
-    def process_entry(self, entry: tuple[str, Series]) -> Series:
-        path, series = entry
-        starting_angles = numpy_str_to_array(series[self.initial_guess_from + '_angles'])
-        optimization_results = [None] * len(self.workers)
-
-        method_attempts = WorkerCombined.distribute_attempts(self.num_attempts, self.attempt_shares)
-        for i in range(len(self.workers)):
-            optimization_results[i] = self.workers[i].process_entry_core(path, starting_angles=starting_angles, num_attempts=method_attempts[i])
-
-        df = DataFrame(optimization_results)
-        best_ind = np.argmax(df.iloc[:, 0])
-        series[self.out_col] = df.iloc[best_ind, 0]
-        series[self.out_col + '_angles'] = df.iloc[best_ind, 1]
-        series[self.out_col + '_nfev'] = sum(df.iloc[:, 2])
-        return series
+    def optimize_angles(self, evaluator: Evaluator, starting_angles: ndarray) -> OptimizeResult:
+        optimization_result = optimize_qaoa_angles(evaluator, starting_angles=starting_angles, method='Nelder-Mead')
+        return optimization_result
 
 
 @dataclass(kw_only=True)
-class WorkerMA(WorkerStandard):
+class WorkerRepeater(WorkerMaxCutBase):
     """
-    Worker that executes MA-QAOA optimization (independent angles on each term).
-    :var guess_format: Name of format of starting point (ma or qaoa).
+    Worker that implements processing by calling another worker specified number of times and stores the series corresponding to the largest result.
+    :var worker: Worker to repeat.
+    :var num_repeats: Number of times to repeat.
     """
-    search_space: str = field(init=False)
-    guess_provider: WorkerStandard | None = None
-    guess_format: str
+    worker: WorkerQAOABase
+    num_repeats: int
 
-    def __post_init__(self):
-        if self.guess_format != 'ma' and self.guess_format != 'qaoa':
-            raise Exception('Guess format can be ma or qaoa')
-        self.search_space = 'ma'
+    def process_job_item(self, job_item: tuple[bool, Series]) -> Series:
+        optimize, series = job_item
+        if not optimize:
+            return self.worker.process_job_item(job_item)
 
-    def process_entry(self, entry: tuple[str, Series]) -> Series:
-        path, series = entry
-        starting_angles = None if self.initial_guess_from is None else numpy_str_to_array(series[self.initial_guess_from + '_angles'])
-        if self.guess_provider is not None:
-            starting_angles = self.guess_provider.provide_guess(angles=starting_angles)
-
-        if self.guess_format == 'qaoa':
-            if starting_angles is None:
-                starting_angles = random.uniform(-np.pi, np.pi, 2 * self.p)
-            graph = self.reader(path)
-            starting_angles = convert_angles_qaoa_to_ma(starting_angles, len(graph.edges), len(graph))
-
-        ar, angles, nfev = WorkerStandard.process_entry_core(self, path, starting_angles=starting_angles)
-        series[self.out_col] = ar
-        series[self.out_col + '_angles'] = angles
-        series[self.out_col + '_nfev'] = nfev
-        return series
+        best_result = -np.inf
+        best_series = None
+        for _ in range(self.num_repeats):
+            next_series = self.worker.process_job_item(job_item)
+            if next_series[self.out_col] > best_result:
+                best_result = next_series[self.out_col]
+                best_series = next_series
+        return best_series
 
 
-class WorkerMaxCut(WorkerAbstract):
-    """ Worker that evaluates maxcut by brute-force and writes it to the input file as graph property. """
-
-    def process_entry(self, entry: tuple[str, Series]) -> Series:
-        path, series = entry
-        graph = self.reader(path)
-        cut_vals = evaluate_graph_cut(graph)
-        max_cut = int(max(cut_vals))
-        graph.graph['maxcut'] = max_cut
-        nx.write_gml(graph, path)
-        return series
+@dataclass(kw_only=True)
+class WorkerComposite(WorkerMaxCutBase, ABC):
+    """
+    Worker that implements some composition of other workers.
+    :var workers: List of workers in the composition.
+    """
+    workers: list[WorkerQAOABase]
 
 
-def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_workers: int, worker: WorkerBaseQAOA):
+@dataclass(kw_only=True)
+class WorkerSequential(WorkerComposite):
+    """
+    Worker that implements sequential composition of other workers.
+    The inner workers exchange their data by updating the input series and must be properly initialized to enable the desired interaction pattern between them.
+    Each worker must implement conversion (if needed) form the search space of the previous worker if their final angles are to be used as initial angles for the next worker.
+    """
+
+    def process_job_item(self, job_item: tuple[bool, Series]) -> Series:
+        optimize, updated_series = job_item
+        if not optimize:
+            return self.workers[0].process_job_item(job_item)
+
+        for worker in self.workers:
+            updated_series = worker.process_job_item((True, updated_series))
+        return updated_series
+
+
+@dataclass(kw_only=True)
+class WorkerSequentialRepeater(WorkerSequential):
+    """
+    Specialization of WorkerSequential for the cases when the chain is executed multiple times, and we want to ensure that each time each worker in the chain produces different
+    angles for the next worker. The optimized angles of each internal worker have to be written to self.out_col + '_angles' column (standard worker behavior).
+    If a given worker produces angles that have already been tried, then the angles will be replaced by random angles for the next worker.
+    """
+    num_repeats: int
+    similarity_threshold: float = 1e-3
+
+    def process_job_item(self, job_item: tuple[bool, Series]) -> Series:
+        optimize, original_series = job_item
+        if not optimize:
+            return self.workers[0].process_job_item(job_item)
+
+        best_result = -np.inf
+        best_series = None
+        tried_angles = [set() for _ in range(len(self.workers) - 1)]
+        for i in range(self.num_repeats):
+            updated_series = original_series.copy()
+            for j, worker in enumerate(self.workers):
+                updated_series = worker.process_job_item((True, updated_series))
+                if j < len(tried_angles):
+                    next_angles = updated_series[worker.out_col + '_angles']
+                    similar = [max(abs(next_angles - angles)) < self.similarity_threshold for angles in tried_angles[j]]
+                    if any(similar):
+                        next_angles = random.uniform(-np.pi, np.pi, len(next_angles))
+                        updated_series[worker.out_col + '_angles'] = next_angles
+                    else:
+                        tried_angles[j].add(next_angles)
+            if updated_series[self.out_col] > best_result:
+                best_result = updated_series[self.out_col]
+                best_series = updated_series
+        return best_series
+
+
+def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_workers: int, worker: WorkerMaxCutBase):
     """
     Optimizes cut expectation for a given set of graphs in parallel and writes the output dataframe.
     :param dataframe_path: Path to input dataframe with information about jobs.
@@ -513,29 +539,24 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
     :param num_workers: Number of parallel workers.
     :param worker: Worker instance.
     """
-    df = pd.read_csv(dataframe_path, index_col=0)
+    df = pd.read_csv(dataframe_path)
     selected_rows = rows_func(df)
-    rows_to_process = list(df.loc[selected_rows, :].iterrows())
-    remaining_rows = df.loc[~selected_rows, :]
-
-    if len(rows_to_process) == 0:
-        return
+    job_items = list(zip(selected_rows, [tuple[1] for tuple in df.iterrows()]))
 
     results = []
     if num_workers == 1:
-        for result in tqdm(map(worker.process_entry, rows_to_process), total=len(rows_to_process), smoothing=0, ascii=' █'):
+        for result in tqdm(map(worker.process_job_item, job_items), total=len(job_items), smoothing=0, ascii=' █'):
             results.append(result)
     else:
         with Pool(num_workers) as pool:
-            for result in tqdm(pool.imap(worker.process_entry, rows_to_process), total=len(rows_to_process), smoothing=0, ascii=' █'):
+            for result in tqdm(pool.imap(worker.process_job_item, job_items), total=len(job_items), smoothing=0, ascii=' █'):
                 results.append(result)
 
-    df = pd.concat((DataFrame(results), remaining_rows)).sort_index(key=natsort_keygen())
-    df.index.name = 'path'
-    if hasattr(worker, 'postprocess_dataframe'):
-        df = worker.postprocess_dataframe(df)
+    # df = DataFrame(results).sort_values('path', key=natsort_keygen())
+    df = DataFrame(results).sort_index()
     df.to_csv(dataframe_path)
 
-    dataset_id = re.search(r'nodes_\d+/depth_\d+', dataframe_path)[0]
-    print(f'dataset: {dataset_id}; p: {worker.p}; mean: {np.mean(df[worker.out_col]):.3f}; min: {min(df[worker.out_col]):.3f}; converged: {sum(df[worker.out_col] > 0.9995)}; '
-          f'nfev: {np.mean(df[worker.out_col + "_nfev"].where(lambda x: x != 0)):.0f}\n')
+    if isinstance(worker, WorkerQAOABase):
+        dataset_id = re.search(r'nodes_\d+/depth_\d+', dataframe_path)[0]
+        print(f'dataset: {dataset_id}; p: {worker.p}; mean: {np.mean(df[worker.out_col]):.3f}; min: {min(df[worker.out_col]):.3f}; converged: {sum(df[worker.out_col] > 0.9995)}; '
+              f'nfev: {np.mean(df[worker.out_col + "_nfev"].where(lambda x: x != 0)):.0f}\n')

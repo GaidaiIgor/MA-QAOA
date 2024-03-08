@@ -8,10 +8,10 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
-from src.angle_strategies import SearchSpace
-from src.graph_utils import get_index_edge_list
-from src.optimization import optimize_qaoa_angles, Evaluator
-from src.preprocessing import evaluate_graph_cut, evaluate_z_term
+from src.angle_strategies.search_space import SearchSpace
+from src.optimization import optimize_qaoa_angles
+from src.optimization.evaluator import Evaluator
+from src.preprocessing import evaluate_all_cuts, evaluate_z_term
 
 import numdifftools as nd
 import src.optimization as optimization
@@ -32,7 +32,7 @@ def run_add_graph():
     g.add_edge(4, 3)
     g.add_edge(4, 5)
 
-    cut_vals = evaluate_graph_cut(g)
+    cut_vals = evaluate_all_cuts(g)
     g.graph['max_cut'] = int(max(cut_vals))
     nx.write_gml(g, f'graphs/other/simple/bipartite_full_n6.gml')
 
@@ -53,32 +53,36 @@ def run_point():
 
 def run_optimization():
     graph = nx.read_gml('graphs/other/simple/n8_crand_example.gml', destringizer=int)
-    p = 1
+    p = 3
 
     # search_space = 'qaoa'
     # starting_point = np.array([0.2, -0.2] * p)
 
-    search_space = 'ma'
-    starting_point = np.array([0.2] * 10 + [-0.2] * 8)
-    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
+    # search_space = 'ma'
+    starting_point = np.array(([0.2] * 10 + [-0.2] * 8) * p)
 
-    gradient = nd.Gradient(evaluator.evaluate, 0.01)(starting_point)
+    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
+
+    # gradient = nd.Gradient(evaluator.evaluate, 0.01)(starting_point)
+    # print(optimization.call_counter)
     # result = optimize_qaoa_angles(evaluator, starting_angles=starting_point, options={'maxiter': 1})
     # print(f'Budget: {result.nfev}')
     # gradient = result.x - starting_point
 
-    num_attempts = 1000
-    stats = np.zeros((2, num_attempts))
-    for i in range(num_attempts):
-        search_space = SearchSpace(np.array([gradient]), starting_point)
-        search_space.augment_basis(14)
-        evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
-        starting_point_new = np.array([0] * evaluator.num_angles)
-        result = optimize_qaoa_angles(evaluator, starting_angles=starting_point_new)
-        stats[0, i] = -result.fun / graph.graph["max_cut"]
-        stats[1, i] = result.nfev
-    stats_avg = [np.mean(stats[0, :]), np.min(stats[0, :]), np.max(stats[0, :]), np.mean(stats[1, :]), np.min(stats[1, :]), np.max(stats[1, :])]
-    print(stats_avg)
+    # num_attempts = 1000
+    # stats = np.zeros((2, num_attempts))
+    # for i in range(num_attempts):
+    #     # basis = np.array([gradient])
+    #     basis = np.empty((0, len(starting_point)))
+    #     search_space = SearchSpace(basis, starting_point)
+    #     search_space.augment_basis(13)
+    #     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
+    #     starting_point_new = np.array([0] * evaluator.num_angles)
+    #     result = optimize_qaoa_angles(evaluator, starting_angles=starting_point_new)
+    #     stats[0, i] = -result.fun / graph.graph["max_cut"]
+    #     stats[1, i] = result.nfev
+    # stats_avg = [np.mean(stats[0, :]), np.min(stats[0, :]), np.max(stats[0, :]), np.mean(stats[1, :]), np.min(stats[1, :]), np.max(stats[1, :])]
+    # print(stats_avg)
 
     # target_vals = evaluate_graph_cut(graph)
     # driver_edges = np.array([[0, 1], [2, 3], [4, 5]])
@@ -95,7 +99,7 @@ def run_optimization():
     # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
 
     # result = optimize_qaoa_angles(evaluator, starting_angles=starting_point)
-    # print(f'Budget: {result.nfev} + Preprocessing: {optimization.counter}')
+    # print(f'Budget: {result.nfev}')
     # print(f'Best AR: {-result.fun / graph.graph["max_cut"]}')
     # print(f'Maximizing angles: {repr(result.x)}')
     # print('Done')
@@ -119,6 +123,7 @@ def run_draw_graph():
 if __name__ == '__main__':
     logging.basicConfig()
     logger = logging.getLogger('QAOA')
+    logger.setLevel(logging.WARNING)
     np.set_printoptions(linewidth=160, formatter={'float': lambda x: '{:.3f}'.format(x)})
 
     # Select procedure to run below

@@ -4,7 +4,8 @@ Examples of basic uses.
 import networkx as nx
 import numpy as np
 
-from src.optimization import Evaluator, optimize_qaoa_angles
+from src.optimization import optimize_qaoa_angles
+from src.optimization.evaluator import Evaluator
 
 
 def run_point():
