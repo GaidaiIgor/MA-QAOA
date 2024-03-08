@@ -1,6 +1,4 @@
-"""
-Entry points for test single core uses.
-"""
+""" Entry points for test single core uses. """
 import logging
 import time
 
@@ -8,14 +6,8 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
-from src.angle_strategies.search_space import SearchSpace
-from src.optimization import optimize_qaoa_angles
 from src.optimization.evaluator import Evaluator
-from src.preprocessing import evaluate_all_cuts, evaluate_z_term
-
-import numdifftools as nd
-import src.optimization as optimization
-import scipy.linalg as linalg
+from src.preprocessing import evaluate_all_cuts
 
 
 def run_add_graph():

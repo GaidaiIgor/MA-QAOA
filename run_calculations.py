@@ -1,6 +1,4 @@
-"""
-Entry points for large scale parallel calculation functions.
-"""
+""" Entry points for large scale parallel calculation functions. """
 
 import os
 from functools import partial
@@ -101,8 +99,8 @@ def init_dataframe(data_path: str, worker: WorkerQAOABase, out_path: str):
 def run_graphs_parallel():
     nodes = list(range(9, 10))
     depths = list(range(3, 4))
-    ps = list(range(1, 2))
-    params_per_layer = list(range(1, 2))
+    ps = list(range(1, 4))
+    params_per_layer = list(range(16, 17))
 
     num_workers = 20
     convergence_threshold = 0.9995

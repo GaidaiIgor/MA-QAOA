@@ -45,12 +45,12 @@ def assign_distinct_colors(lines: list[Line]):
         lines[i].color = colors[i]
 
 
-def plot_general(lines: list[Line], labels: tuple[str | None, str | None] = None, tick_multiples: tuple[float | None, float | None] = None,
+def plot_general(lines: list[Line], axis_labels: tuple[str | None, str | None] = None, tick_multiples: tuple[float | None, float | None] = None,
                  boundaries: tuple[float | None, float | None, float | None, float | None] = None, font_size: int = 20, loc: str = 'best'):
     """
     Plots specified list of lines.
     :param lines: List of lines.
-    :param labels: Labels for x and y axes.
+    :param axis_labels: Labels for x and y axes.
     :param tick_multiples: Base multiples for ticks along x and y axes.
     :param boundaries: x min, x max, y min, y max floats defining plot boundaries.
     :param font_size: Font size.
@@ -65,11 +65,11 @@ def plot_general(lines: list[Line], labels: tuple[str | None, str | None] = None
         if line.label != '_nolabel_':
             plt.legend(loc=loc)
 
-    if labels is not None:
-        if labels[0] is not None:
-            plt.xlabel(labels[0])
-        if labels[1] is not None:
-            plt.ylabel(labels[1])
+    if axis_labels is not None:
+        if axis_labels[0] is not None:
+            plt.xlabel(axis_labels[0])
+        if axis_labels[1] is not None:
+            plt.ylabel(axis_labels[1])
 
     if tick_multiples is not None:
         if tick_multiples[0] is not None:

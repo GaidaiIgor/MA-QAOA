@@ -554,7 +554,7 @@ def optimize_expectation_parallel(dataframe_path: str, rows_func: callable, num_
 
     # df = DataFrame(results).sort_values('path', key=natsort_keygen())
     df = DataFrame(results).sort_index()
-    df.to_csv(dataframe_path)
+    df.to_csv(dataframe_path, index=False)
 
     if isinstance(worker, WorkerQAOABase):
         dataset_id = re.search(r'nodes_\d+/depth_\d+', dataframe_path)[0]

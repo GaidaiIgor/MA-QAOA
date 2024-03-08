@@ -354,7 +354,7 @@ class DataExtractor:
     """ Class that defines data extraction (rearrangement) methods. """
 
     def __init__(self, df_path: str):
-        self.df = pd.read_csv(df_path, index_col=0)
+        self.df = pd.read_csv(df_path)
 
     def get_ps(self) -> list:
         """
@@ -372,14 +372,17 @@ class DataExtractor:
         """
         return self.df.filter(regex=r'p_\d+$').apply(aggregator)
 
-    def get_cost_all(self) -> DataFrame:
+    def get_cost_all(self, p_scale: bool = True) -> DataFrame:
         """
         Returns total cost for each graph.
+        :param p_scale: Whether cost should be multiplied by the number of layers.
         :return: Total cost for each graph.
         """
-        ps = self.get_ps()
-        cost_all = self.df.filter(regex=r'p_\d+_nfev$').cumsum(axis=1) * ps
-        # cost_all = self.df.filter(regex=r'p_\d+_nfev$').cumsum(axis=1)
+        cost_all = self.df.filter(regex=r'p_\d+_nfev$')
+        if p_scale:
+            ps = self.get_ps()
+            cost_all *= ps
+        cost_all = cost_all.cumsum(axis=1)
         return cost_all
 
     def get_cost_average(self) -> Sequence:
