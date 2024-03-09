@@ -11,6 +11,7 @@ from pandas import DataFrame
 
 from src.angle_strategies.basis_provider import BasisProviderRandom
 from src.angle_strategies.guess_provider import GuessProviderConstant, GuessProviderSeries
+from src.angle_strategies.space_dimension_provider import SpaceDimensionProviderRelative
 from src.data_processing import merge_dfs, numpy_str_to_array
 from src.graph_utils import get_max_edge_depth, is_isomorphic
 from src.parallel import optimize_expectation_parallel, WorkerGreedy, WorkerSubspaceMA, WorkerQAOABase, WorkerIterativePerturb
@@ -99,8 +100,8 @@ def init_dataframe(data_path: str, worker: WorkerQAOABase, out_path: str):
 def run_graphs_parallel():
     nodes = list(range(9, 10))
     depths = list(range(3, 4))
-    ps = list(range(1, 4))
-    params_per_layer = list(range(16, 17))
+    ps = list(range(1, 6))
+    param_fractions = np.linspace(0.1, 1, 10)
 
     num_workers = 20
     convergence_threshold = 0.9995
@@ -109,14 +110,16 @@ def run_graphs_parallel():
     for node in nodes:
         node_depths = [3] if node < 12 else depths
         for depth in node_depths:
-            for ppl in params_per_layer:
+            for fraction in param_fractions:
+                print(f'Fraction {fraction}')
                 for p in ps:
-                    out_path_suffix = f'output/ma_subspace/random/ppl_{ppl}/out.csv'
+                    out_path_suffix = f'output/ma_subspace/random/frac_{fraction}/out.csv'
                     out_col = f'p_{p}'
                     guess_provider = GuessProviderConstant()
                     transfer_from = None if p == 1 else f'p_{p - 1}'
                     transfer_p = None if p == 1 else p - 1
-                    basis_provider = BasisProviderRandom(num_dims=ppl * p)
+                    dimension_provider = SpaceDimensionProviderRelative(param_fraction=fraction)
+                    basis_provider = BasisProviderRandom(dimension_provider=dimension_provider)
                     worker_subspace = WorkerSubspaceMA(out_col=out_col, reader=reader, p=p, guess_provider=guess_provider, transfer_from=transfer_from, transfer_p=transfer_p,
                                                        basis_provider=basis_provider)
                     worker = worker_subspace

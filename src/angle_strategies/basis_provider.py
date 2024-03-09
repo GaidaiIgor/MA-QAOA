@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy import ndarray, linalg
 
+from src.angle_strategies.space_dimension_provider import SpaceDimensionProviderBase
 from src.optimization.optimization import Evaluator
 
 
@@ -61,11 +62,12 @@ class BasisProviderBase(ABC):
 class BasisProviderRandom(BasisProviderBase):
     """
     Generates random basis for search space.
-    :var num_dims: Desired number of basis vectors.
+    :var dimension_provider: Object that determines the dimensionality of the resulting basis.
     """
-    num_dims: int
+    dimension_provider: SpaceDimensionProviderBase
 
     def provide_basis(self, evaluator_ma: Evaluator) -> ndarray:
         basis = np.empty((0, evaluator_ma.num_angles))
-        basis = BasisProviderBase.augment_basis(basis, self.num_dims)
+        num_dims = self.dimension_provider.get_number_of_dimensions(evaluator_ma)
+        basis = BasisProviderBase.augment_basis(basis, num_dims)
         return basis
