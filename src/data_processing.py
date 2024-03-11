@@ -357,10 +357,7 @@ class DataExtractor:
         self.df = pd.read_csv(df_path)
 
     def get_ps(self) -> list:
-        """
-        Returns the values of computed p in this dataset.
-        :return: p values.
-        """
+        """ Returns the values of computed p in this dataset. """
         ps = [int(col.split('_')[1]) for col in self.df.columns if re.match(r'p_\d+$', col)]
         return ps
 
@@ -386,19 +383,20 @@ class DataExtractor:
         return cost_all
 
     def get_cost_average(self) -> Sequence:
-        """
-        Returns average cost for each p.
-        :return: Average cost for each p.
-        """
+        """ Returns average cost for each p. """
         costs_all = self.get_cost_all()
         return costs_all.mean()
 
     def get_cost_worst_case(self) -> Sequence:
-        """
-        Returns cost for the worst case graphs.
-        :return: Cost for the worst case graphs.
-        """
+        """ Returns cost of the worst AR. If all ARs are converged, then selects the largest cost. """
+        conv_threshold = 0.9995
         costs_all = self.get_cost_all()
-        min_inds = self.get_ar_aggregated(np.argmin)
-        costs_worst_case = [costs_all.iloc[min_inds[col_ind], col_ind] for col_ind in range(costs_all.shape[1])]
+        worst_ar_inds = list(self.get_ar_aggregated(np.argmin))
+        worst_ars = list(self.get_ar_aggregated(np.min))
+        costs_worst_case = [0] * costs_all.shape[1]
+        for i in range(len(costs_worst_case)):
+            if worst_ars[i] > conv_threshold:
+                costs_worst_case[i] = np.max(costs_all.iloc[:, i])
+            else:
+                costs_worst_case[i] = costs_all.iloc[worst_ar_inds[i], i]
         return costs_worst_case

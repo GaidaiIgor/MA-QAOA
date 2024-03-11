@@ -1,21 +1,27 @@
 """ Plots for MA-subspace performance characterization. """
 import matplotlib.pyplot as plt
+import numpy as np
 
 from src.data_processing import DataExtractor
 from src.plots.plots_qaoa import plot_methods_ar_9_nodes_general
 
 
 def plot_ar_vs_cost_subspace():
-    ppl_vals = [1, 2, 4, 8, 16]
-    ppl_methods = [f'ma_subspace/random/ppl_{ppl}' for ppl in ppl_vals]
-    ppl_labels = [f'Random {ppl} PPL' for ppl in ppl_vals]
+    # param_vals = np.linspace(0.2, 0.8, 4)
+    # subspace_methods = [f'ma_subspace/random/frac_{frac:.1f}' for frac in param_vals]
+    # subspace_labels = [f'Random {frac:.1f}' for frac in param_vals]
 
-    methods = ['qaoa/constant/0.2'] + ppl_methods
-    labels = ['QAOA'] + ppl_labels
-    arg_x_func = DataExtractor.get_cost_average
+    param_vals = [1, 2, 3, 4]
+    subspace_methods = [f'ma_subspace/random/ppl_{ppl}' for ppl in param_vals]
+    subspace_labels = [f'Random {ppl} PPL' for ppl in param_vals]
+
+    methods = ['qaoa/constant/0.2', 'ma/constant/0.2'] + subspace_methods
+    labels = ['QAOA', 'MA'] + subspace_labels
+    x_mean_func = DataExtractor.get_cost_average
+    x_min_func = DataExtractor.get_cost_worst_case
     axis_labels = ('Cost', 'AR')
-    boundaries = (-500, 8000, None, None)
-    plot_methods_ar_9_nodes_general(methods, labels, arg_x_func, axis_labels=axis_labels, boundaries=boundaries)
+    boundaries = (-500, 14500, None, None)
+    plot_methods_ar_9_nodes_general(methods, labels, x_mean_func, x_min_func, axis_labels=axis_labels, boundaries=boundaries)
 
 
 if __name__ == '__main__':
