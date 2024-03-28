@@ -97,8 +97,7 @@ class WorkerQAOABase(WorkerExplicit, ABC):
 
     def get_initial_angles(self, evaluator: Evaluator, series: Series, guess_provider: GuessProviderBase = None) -> ndarray:
         """
-        Returns initial angles from the given series, or None if the angle column is unspecified. Converts angles if guess format and search space mismatch for known conversions.
-        The number of layers in the guess has to match the current number of layers.
+        Returns initial angles for the optimization. The number of layers in the guess has to match the current number of layers.
         :param evaluator: Evaluator for which a guess is generated.
         :param series: Series to extract the angles from.
         :param guess_provider: Custom guess provider, or None ot use self.guess_provider.
@@ -261,7 +260,7 @@ class WorkerSubspaceMA(WorkerQAOABase):
             path = series['path']
             graph = self.reader(path)
             evaluator_ma = self.get_evaluator(graph, 'ma')
-            basis = self.basis_provider.provide_basis(evaluator_ma)
+            basis, nfev = self.basis_provider.provide_basis(evaluator_ma)
             shift = self.get_initial_angles(evaluator_ma, series)
             search_space = SearchSpace(basis, shift)
             evaluator = self.get_evaluator(graph, search_space)
@@ -269,6 +268,7 @@ class WorkerSubspaceMA(WorkerQAOABase):
             try:
                 optimization_result = self.optimize_angles(evaluator, initial_angles)
                 optimization_result.x = search_space.transform_coordinates(optimization_result.x)
+                optimization_result.nfev += nfev
             except Exception:
                 raise Exception(f'Optimization failed at {path}')
         else:

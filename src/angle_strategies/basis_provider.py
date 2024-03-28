@@ -4,8 +4,9 @@ from dataclasses import dataclass
 import numpy as np
 from numpy import ndarray, linalg
 
+from src.angle_strategies.guess_provider import GuessProviderBase
 from src.angle_strategies.space_dimension_provider import SpaceDimensionProviderBase
-from src.optimization.optimization import Evaluator
+from src.optimization.optimization import Evaluator, optimize_qaoa_angles
 
 
 def gram_schmidt(vectors: ndarray) -> ndarray:
@@ -24,20 +25,37 @@ def gram_schmidt(vectors: ndarray) -> ndarray:
     return ortho_vectors
 
 
+@dataclass(kw_only=True)
 class BasisProviderBase(ABC):
-    """ Base class for search space basis providers. """
+    """
+    Base class for search space basis providers.
+    :var dimension_provider: Object that determines the dimensionality of the resulting basis.
+    """
+    dimension_provider: SpaceDimensionProviderBase
 
     @abstractmethod
-    def provide_basis(self, evaluator_ma: Evaluator) -> ndarray:
+    def provide_initial_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
         """
-        Provides basis for the subspace of a given MA evaluator according to the current class's strategy.
+        Provides initial (incomplete) basis for the subspace of a given MA evaluator according to the current class's strategy.
         :param evaluator_ma: Full-dimensional MA evaluator for a given graph.
-        :return: Basis as a 2D row array.
+        :return: 1) Basis as a 2D row array; 2) Number of evaluator calls that was made to construct it.
         """
         pass
 
+    def provide_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
+        """
+        Provides basis for the subspace of a given MA evaluator according to the current class's strategy.
+        :param evaluator_ma: Full-dimensional MA evaluator for a given graph.
+        :return: 1) Basis as a 2D row array; 2) Number of evaluator calls that was made to construct it.
+        """
+        basis, nfev = self.provide_initial_basis(evaluator_ma)
+        full_num_dims = self.dimension_provider.get_number_of_dimensions(evaluator_ma)
+        if full_num_dims > basis.shape[0]:
+            basis = self.augment_basis_random(basis, full_num_dims - basis.shape[0])
+        return basis, nfev
+
     @staticmethod
-    def augment_basis(basis: ndarray, num_dims: int) -> ndarray:
+    def augment_basis_random(basis: ndarray, num_dims: int) -> ndarray:
         """
         Augments basis by adding num_dim random orthonormal vectors to a given basis. Uses Gram-Schmidt orthogonalization procedure.
         :param basis: Existing basis.
@@ -60,14 +78,24 @@ class BasisProviderBase(ABC):
 
 @dataclass(kw_only=True)
 class BasisProviderRandom(BasisProviderBase):
-    """
-    Generates random basis for search space.
-    :var dimension_provider: Object that determines the dimensionality of the resulting basis.
-    """
-    dimension_provider: SpaceDimensionProviderBase
+    """ Generates random basis for search space. """
 
-    def provide_basis(self, evaluator_ma: Evaluator) -> ndarray:
-        basis = np.empty((0, evaluator_ma.num_angles))
-        num_dims = self.dimension_provider.get_number_of_dimensions(evaluator_ma)
-        basis = BasisProviderBase.augment_basis(basis, num_dims)
-        return basis
+    def provide_initial_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
+        return np.empty((0, evaluator_ma.num_angles)), 0
+
+
+@dataclass(kw_only=True)
+class BasisProviderGradient(BasisProviderBase):
+    """
+    Generates basis where the first vector is chosen as MA's gradient at the initial point given by the provider. Other vectors are random.
+    :var gradient_point_provider: Object that provides the point where gradient is evaluated.
+    """
+    gradient_point_provider: GuessProviderBase
+
+    def provide_initial_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
+        gradient_point = self.gradient_point_provider.provide_guess(evaluator_ma)
+        result = optimize_qaoa_angles(evaluator_ma, gradient_point, check_success=False, options={'maxiter': 1})
+        gradient = result.x - gradient_point
+        gradient /= linalg.norm(gradient)
+        basis = gradient.reshape((1, -1))
+        return basis, result.nfev

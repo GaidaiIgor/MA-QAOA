@@ -11,8 +11,8 @@ def plot_ar_vs_cost_subspace():
     # subspace_methods = [f'ma_subspace/random/frac_{frac:.1f}' for frac in param_vals]
     # subspace_labels = [f'Random {frac:.1f}' for frac in param_vals]
 
-    param_vals = [1, 2, 3, 4]
-    subspace_methods = [f'ma_subspace/random/ppl_{ppl}' for ppl in param_vals]
+    param_vals = [1]
+    subspace_methods = [f'ma_subspace/gradient/ppl_{ppl}' for ppl in param_vals]
     subspace_labels = [f'Random {ppl} PPL' for ppl in param_vals]
 
     methods = ['qaoa/constant/0.2', 'ma/constant/0.2'] + subspace_methods

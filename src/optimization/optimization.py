@@ -14,13 +14,15 @@ from src.data_processing import normalize_qaoa_angles
 from src.optimization.evaluator import Evaluator, change_sign
 
 
-def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, method: str = 'L-BFGS-B', try_nelder_mead: bool = None, options: dict = None, num_restarts: int = 1,
-                         objective_max: float = None, objective_tolerance: float = 0.9995, normalize_angles: bool = True, **kwargs) -> OptimizeResult:
+def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, method: str = 'L-BFGS-B', check_success: bool = True, try_nelder_mead: bool = None,
+                         options: dict = None, num_restarts: int = 1, objective_max: float = None, objective_tolerance: float = 0.9995, normalize_angles: bool = True,
+                         **kwargs) -> OptimizeResult:
     """
     Maximizes evaluator function (MaxCut expectation).
     :param evaluator: Evaluator instance.
     :param starting_angles: Starting point for optimization. Chosen randomly if None.
     :param method: Optimization method.
+    :param check_success: True to check if optimization was successful.
     :param try_nelder_mead: True to automatically attempt Nelder-Mead optimization method if the main method fails. True by default if the optimization method is not Nelder-Mead.
     :param num_restarts: Number of random starting points to try. Has no effect if specific starting point is provided.
     :param options: Optimization options. Maxint number of iterations will be used by default, if not specified.
@@ -50,14 +52,14 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, 
     for i in range(num_restarts):
         next_angles = random.uniform(-np.pi, np.pi, evaluator.num_angles) if starting_angles is None else starting_angles
         result = optimize.minimize(change_sign(evaluator.func), next_angles, method=method, options=options, **kwargs)
-        if not result.success:
+        if check_success and not result.success:
             logger.warning(f'Optimization with {method} failed with the following message:')
             logger.warning(result.message)
             if try_nelder_mead:
                 logger.warning('Switching to Nelder-Mead')
                 result = optimize.minimize(change_sign(evaluator.func), next_angles, method='Nelder-Mead', options=options, **kwargs)
                 if not result.success:
-                    logger.error('Optimization with Nelder-Mead failed')
+                    logger.error('Optimization failed')
                     logger.error(result)
             if not result.success:
                 raise Exception('Optimization failed')

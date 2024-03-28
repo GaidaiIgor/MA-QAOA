@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
-from src.angle_strategies.basis_provider import BasisProviderRandom
+from src.angle_strategies.basis_provider import BasisProviderRandom, BasisProviderGradient
 from src.angle_strategies.guess_provider import GuessProviderConstant, GuessProviderSeries
 from src.angle_strategies.space_dimension_provider import SpaceDimensionProviderRelative, SpaceDimensionProviderAbsolute
 from src.data_processing import merge_dfs, numpy_str_to_array
@@ -100,8 +100,8 @@ def init_dataframe(data_path: str, worker: WorkerQAOABase, out_path: str):
 def run_graphs_parallel():
     nodes = list(range(9, 10))
     depths = list(range(3, 4))
-    ps = list(range(7, 8))
-    param_vals = [4]  # np.linspace(0.1, 1, 10)
+    ps = list(range(1, 13))
+    param_vals = [1]  # np.linspace(0.1, 1, 10)
 
     num_workers = 20
     convergence_threshold = 0.9995
@@ -114,14 +114,15 @@ def run_graphs_parallel():
                 print(f'Param: {param}')
                 for p in ps:
                     # out_path_suffix = f'output/ma_subspace/random/frac_{param:.1f}/out.csv'
-                    out_path_suffix = f'output/ma_subspace/random/ppl_{param}/out.csv'
+                    out_path_suffix = f'output/ma_subspace/gradient/ppl_{param}/out.csv'
                     out_col = f'p_{p}'
                     guess_provider = GuessProviderConstant()
                     transfer_from = None if p == 1 else f'p_{p - 1}'
                     transfer_p = None if p == 1 else p - 1
                     # dimension_provider = SpaceDimensionProviderRelative(param_fraction=param)
                     dimension_provider = SpaceDimensionProviderAbsolute(num_dims=param * p)
-                    basis_provider = BasisProviderRandom(dimension_provider=dimension_provider)
+                    # basis_provider = BasisProviderRandom(dimension_provider=dimension_provider)
+                    basis_provider = BasisProviderGradient(dimension_provider=dimension_provider, gradient_point_provider=guess_provider)
                     worker_subspace = WorkerSubspaceMA(out_col=out_col, reader=reader, p=p, guess_provider=guess_provider, transfer_from=transfer_from, transfer_p=transfer_p,
                                                        basis_provider=basis_provider)
                     worker = worker_subspace
