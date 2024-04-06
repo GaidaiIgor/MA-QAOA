@@ -6,8 +6,10 @@ from dataclasses import dataclass
 from typing import Sequence
 
 import distinctipy
+import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.ticker import MultipleLocator
+from numpy import ndarray
 
 colors = [(0, 0, 1), (1, 0, 0), (0, 0.5, 0), (0, 0, 0), (0, 0.75, 0.75), (0.75, 0, 0.75), (0.75, 0.75, 0)]
 colors += distinctipy.get_colors(10, colors + [(1, 1, 1)])
@@ -26,6 +28,11 @@ class Line:
     style: str | int = '-'
     label: str = '_nolabel_'
 
+    def set_color(self, color: tuple | int):
+        self.color = color
+        if isinstance(color, int):
+            self.color = colors[color]
+
     def __post_init__(self):
         if isinstance(self.color, int):
             self.color = colors[self.color]
@@ -33,6 +40,27 @@ class Line:
             self.marker = markers[self.marker]
         if isinstance(self.style, int):
             self.style = styles[self.style]
+
+
+def data_matrix_to_lines(data: ndarray, line_labels: list[str] = None, colors: list[int] = None, **kwargs) -> list[Line]:
+    """
+    Converts a given data matrix to a set of lines (each line is a row).
+    :param data: 3D data matrix of size 2 x num_lines x num_points. 1st dim - (x, y); 2nd - lines; 3rd - data points.
+    Trailing zeros in each row are ignored and have to be consistent for x and y dimensions.
+    :param line_labels: Line labels.
+    :param colors: Line colors.
+    :return: List of lines.
+    """
+    lines = []
+    for i in range(data.shape[1]):
+        xs = np.trim_zeros(data[0, i, :], trim='b')
+        ys = np.trim_zeros(data[1, i, :], trim='b')
+        lines.append(Line(xs, ys))
+        if colors is not None:
+            lines[-1].set_color(colors[i])
+        if line_labels is not None:
+            lines[-1].label = line_labels[i]
+    return lines
 
 
 def assign_distinct_colors(lines: list[Line]):
@@ -46,7 +74,7 @@ def assign_distinct_colors(lines: list[Line]):
 
 
 def plot_general(lines: list[Line], axis_labels: tuple[str | None, str | None] = None, tick_multiples: tuple[float | None, float | None] = None,
-                 boundaries: tuple[float | None, float | None, float | None, float | None] = None, font_size: int = 20, loc: str = 'best'):
+                 boundaries: tuple[float | None, float | None, float | None, float | None] = None, font_size: int = 20, legend_loc: str = 'best', figure_id: int = None, **kwargs):
     """
     Plots specified list of lines.
     :param lines: List of lines.
@@ -54,16 +82,22 @@ def plot_general(lines: list[Line], axis_labels: tuple[str | None, str | None] =
     :param tick_multiples: Base multiples for ticks along x and y axes.
     :param boundaries: x min, x max, y min, y max floats defining plot boundaries.
     :param font_size: Font size.
-    :param loc: Location of legend.
+    :param legend_loc: Location of legend.
+    :param figure_id: ID of the figure where the results should be plotted or None to create new figure.
     :return: None.
     """
-    plt.figure()
-    plt.rcParams.update({'font.size': font_size})
+    if figure_id is None:
+        new_figure = True
+        plt.figure()
+    else:
+        new_figure = plt.fignum_exists(figure_id)
+        plt.figure(figure_id)
 
+    plt.rcParams.update({'font.size': font_size})
     for line in lines:
         plt.plot(line.xs, line.ys, color=line.color, marker=line.marker, linestyle=line.style, markersize=marker_sizes[line.marker], label=line.label)
         if line.label != '_nolabel_':
-            plt.legend(loc=loc)
+            plt.legend(loc=legend_loc, draggable=True)
 
     if axis_labels is not None:
         if axis_labels[0] is not None:
@@ -87,10 +121,11 @@ def plot_general(lines: list[Line], axis_labels: tuple[str | None, str | None] =
         if boundaries[3] is not None:
             plt.ylim(top=boundaries[3])
 
-    plt.get_current_fig_manager().window.state('zoomed')
-    plt.gca().set_box_aspect(1)
-    plt.gcf().set_size_inches(10, 10)
-    plt.tight_layout(pad=0.5)
+    if new_figure:
+        plt.get_current_fig_manager().window.state('zoomed')
+        plt.gca().set_box_aspect(1)
+        plt.gcf().set_size_inches(10, 10)
+        plt.tight_layout(pad=0.5)
 
 
 def save_figure(file_name: str = None):

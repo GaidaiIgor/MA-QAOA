@@ -3,25 +3,27 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from src.data_processing import DataExtractor
-from src.plots.plots_qaoa import plot_methods_ar_9_nodes_general
+from src.plots.plots_qaoa import plot_methods_9_nodes_general
 
 
 def plot_ar_vs_cost_subspace():
-    # param_vals = np.linspace(0.2, 0.8, 4)
-    # subspace_methods = [f'ma_subspace/random/frac_{frac:.1f}' for frac in param_vals]
-    # subspace_labels = [f'Random {frac:.1f}' for frac in param_vals]
-
-    param_vals = [1]
-    subspace_methods = [f'ma_subspace/gradient/ppl_{ppl}' for ppl in param_vals]
-    subspace_labels = [f'Random {ppl} PPL' for ppl in param_vals]
-
-    methods = ['qaoa/constant/0.2', 'ma/constant/0.2'] + subspace_methods
-    labels = ['QAOA', 'MA'] + subspace_labels
-    x_mean_func = DataExtractor.get_cost_average
-    x_min_func = DataExtractor.get_cost_worst_case
+    x_func = DataExtractor.get_cost_average
+    y_func = lambda ext: DataExtractor.get_ar_aggregated(ext, np.mean)
     axis_labels = ('Cost', 'AR')
-    boundaries = (-500, 14500, None, None)
-    plot_methods_ar_9_nodes_general(methods, labels, x_mean_func, x_min_func, axis_labels=axis_labels, boundaries=boundaries)
+    boundaries = (-500, 14500, 0.8, 1.00625)
+    line_labels = ['QAOA']
+    plot_methods_9_nodes_general(['qaoa/constant/0.2'], x_func, y_func, axis_labels=axis_labels, boundaries=boundaries, line_labels=line_labels, figure_id=0)
+
+    transpose = True
+    max_p = 5
+    if transpose:
+        param_vals = [0.1 * i for i in range(11)]
+        line_labels = [f'Subspace p = {i}' for i in range(1, max_p + 1)]
+    else:
+        param_vals = np.linspace(0.2, 1, 5)
+        line_labels = [f'Random {param:.1g}' for param in param_vals]
+    methods = [f'ma_subspace/random/frac_{param:.1g}' for param in param_vals]
+    plot_methods_9_nodes_general(methods, x_func, y_func, max_p=max_p, transpose=transpose, line_labels=line_labels, colors=range(1, len(methods) + 1), figure_id=0)
 
 
 if __name__ == '__main__':
