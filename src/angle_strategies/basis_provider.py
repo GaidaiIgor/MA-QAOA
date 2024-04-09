@@ -34,7 +34,7 @@ class BasisProviderBase(ABC):
     dimension_provider: SpaceDimensionProviderBase
 
     @abstractmethod
-    def provide_initial_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
+    def provide_core_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
         """
         Provides initial (incomplete) basis for the subspace of a given MA evaluator according to the current class's strategy.
         :param evaluator_ma: Full-dimensional MA evaluator for a given graph.
@@ -48,7 +48,7 @@ class BasisProviderBase(ABC):
         :param evaluator_ma: Full-dimensional MA evaluator for a given graph.
         :return: 1) Basis as a 2D row array; 2) Number of evaluator calls that was made to construct it.
         """
-        basis, nfev = self.provide_initial_basis(evaluator_ma)
+        basis, nfev = self.provide_core_basis(evaluator_ma)
         full_num_dims = self.dimension_provider.get_number_of_dimensions(evaluator_ma)
         if full_num_dims > basis.shape[0]:
             basis = self.augment_basis_random(basis, full_num_dims - basis.shape[0])
@@ -80,7 +80,7 @@ class BasisProviderBase(ABC):
 class BasisProviderRandom(BasisProviderBase):
     """ Generates random basis for search space. """
 
-    def provide_initial_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
+    def provide_core_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
         return np.empty((0, evaluator_ma.num_angles)), 0
 
 
@@ -92,10 +92,26 @@ class BasisProviderGradient(BasisProviderBase):
     """
     gradient_point_provider: GuessProviderBase
 
-    def provide_initial_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
+    def provide_core_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
         gradient_point = self.gradient_point_provider.provide_guess(evaluator_ma)
         result = optimize_qaoa_angles(evaluator_ma, gradient_point, check_success=False, options={'maxiter': 1})
         gradient = result.x - gradient_point
         gradient /= linalg.norm(gradient)
         basis = gradient.reshape((1, -1))
         return basis, result.nfev
+
+
+@dataclass(kw_only=True)
+class BasisProviderQAOA(BasisProviderBase):
+    """ Generates basis where the first 2*p vectors are chosen as in QAOA. Other vectors are random. """
+
+    def provide_core_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
+        basis = np.zeros((2 * evaluator_ma.p, evaluator_ma.num_angles))
+        angles_per_layer = evaluator_ma.num_angles // evaluator_ma.p
+        for i in range(evaluator_ma.p):
+            basis[2 * i, i * angles_per_layer : i * angles_per_layer + evaluator_ma.num_driver_terms] = 1
+            basis[2 * i + 1, i * angles_per_layer + evaluator_ma.num_driver_terms : (i + 1) * angles_per_layer] = 1
+
+        for i in range(basis.shape[0]):
+            basis[i, :] /= linalg.norm(basis[i, :])
+        return basis, 0

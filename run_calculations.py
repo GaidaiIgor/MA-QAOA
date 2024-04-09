@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
-from src.angle_strategies.basis_provider import BasisProviderRandom, BasisProviderGradient
+from src.angle_strategies.basis_provider import BasisProviderRandom, BasisProviderGradient, BasisProviderQAOA
 from src.angle_strategies.guess_provider import GuessProviderConstant, GuessProviderSeries
 from src.angle_strategies.space_dimension_provider import SpaceDimensionProviderRelative, SpaceDimensionProviderAbsolute
 from src.data_processing import merge_dfs, numpy_str_to_array
@@ -82,7 +82,7 @@ def init_dataframe(data_path: str, worker: WorkerQAOABase, out_path: str):
     if not isinstance(worker.guess_provider, GuessProviderSeries):
         paths = [f'{data_path}/{i}.gml' for i in range(1000)]
         df = DataFrame(paths).set_axis(['path'], axis=1)
-    elif worker.search_space == 'ma':
+    elif worker.search_space == 'ma' or worker.search_space == 'ma_subspace':
         df = pd.read_csv(f'{data_path}/output/qaoa/constant/0.2/out.csv')
         df = df.filter(regex=r'p_\d+_angles')
     elif isinstance(worker, (WorkerIterativePerturb, WorkerGreedy)):
@@ -100,8 +100,8 @@ def init_dataframe(data_path: str, worker: WorkerQAOABase, out_path: str):
 def run_graphs_parallel():
     nodes = list(range(9, 10))
     depths = list(range(3, 4))
-    ps = list(range(6, 7))
-    param_vals = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]  # np.linspace(0.1, 1, 10)
+    ps = list(range(1, 6))
+    param_vals = [1]  # np.linspace(0.1, 1, 10)
 
     num_workers = 20
     convergence_threshold = 0.9995
@@ -113,16 +113,17 @@ def run_graphs_parallel():
             for param in param_vals:
                 print(f'Param: {param}')
                 for p in ps:
-                    # out_path_suffix = f'output/ma_subspace/random/frac_{param:.1g}/out.csv'
-                    out_path_suffix = f'output/ma_subspace/random/frac_{param}/out.csv'
+                    out_path_suffix = f'output/ma_subspace/gradient/qaoa/frac_{param:.1g}/out.csv'
                     out_col = f'p_{p}'
-                    guess_provider = GuessProviderConstant()
+                    # guess_provider = GuessProviderConstant()
+                    guess_provider = GuessProviderSeries(format='qaoa', guess_from=f'p_{p}_angles')
                     transfer_from = None if p == 1 else f'p_{p - 1}'
                     transfer_p = None if p == 1 else p - 1
-                    dimension_provider = SpaceDimensionProviderRelative(param_fraction=param)
-                    # dimension_provider = SpaceDimensionProviderAbsolute(num_dims=param)
-                    basis_provider = BasisProviderRandom(dimension_provider=dimension_provider)
-                    # basis_provider = BasisProviderGradient(dimension_provider=dimension_provider, gradient_point_provider=guess_provider)
+                    # dimension_provider = SpaceDimensionProviderRelative(param_fraction=param)
+                    dimension_provider = SpaceDimensionProviderAbsolute(num_dims=param)
+                    # basis_provider = BasisProviderRandom(dimension_provider=dimension_provider)
+                    basis_provider = BasisProviderGradient(dimension_provider=dimension_provider, gradient_point_provider=guess_provider)
+                    # basis_provider = BasisProviderQAOA(dimension_provider=dimension_provider)
                     worker_subspace = WorkerSubspaceMA(out_col=out_col, reader=reader, p=p, guess_provider=guess_provider, transfer_from=transfer_from, transfer_p=transfer_p,
                                                        basis_provider=basis_provider)
                     worker = worker_subspace
