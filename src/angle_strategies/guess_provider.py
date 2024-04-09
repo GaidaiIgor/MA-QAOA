@@ -22,12 +22,12 @@ class GuessProviderBase(ABC):
     format: str
 
     @abstractmethod
-    def provide_initial_guess(self, evaluator: Evaluator, series: Series = None) -> ndarray:
+    def provide_initial_guess(self, evaluator: Evaluator, series: Series = None) -> tuple[ndarray, int]:
         """
         Provides initial guess in the specified guess format.
-        :param evaluator:
-        :param series:
-        :return:
+        :param evaluator: Evaluator for which the guess is generated.
+        :param series: Series with data about evaluator's job (may be needed for some providers).
+        :return: 1) Initial guess for optimization. 2) Number of QPU calls to obtain this guess.
         """
         pass
 
@@ -55,25 +55,25 @@ class GuessProviderBase(ABC):
                 raise Exception('Unknown angle conversion')
         return angles
 
-    def provide_guess(self, evaluator: Evaluator, series: Series = None) -> ndarray:
+    def provide_guess(self, evaluator: Evaluator, series: Series = None) -> tuple[ndarray, int]:
         """
         Provides guess appropriate for the given evaluator based on the data in series.
         :param evaluator: Evaluator for which guess is generated.
         :param series: Series with data about evaluator's job (may be needed for some providers).
-        :return: Initial guess for optimization.
+        :return: 1) Initial guess for optimization. 2) Number of QPU calls to obtain this guess.
         """
-        initial_guess = self.provide_initial_guess(evaluator, series)
+        initial_guess, nfev = self.provide_initial_guess(evaluator, series)
         initial_guess = self.convert_angles_format(initial_guess, evaluator)
-        return initial_guess
+        return initial_guess, nfev
 
 
 @dataclass(kw_only=True)
 class GuessProviderRandom(GuessProviderBase):
     """ Provides random guess. """
 
-    def provide_initial_guess(self, evaluator: Evaluator, series: Series = None) -> ndarray:
+    def provide_initial_guess(self, evaluator: Evaluator, series: Series = None) -> tuple[ndarray, int]:
         initial_angles = random.uniform(-np.pi, np.pi, evaluator.num_angles)
-        return initial_angles
+        return initial_angles, 0
 
 
 @dataclass(kw_only=True)
@@ -88,11 +88,11 @@ class GuessProviderConstant(GuessProviderBase):
     def __post_init__(self):
         assert self.format == 'qaoa', 'format has to be qaoa for GuessProviderConstant'
 
-    def provide_initial_guess(self, evaluator: Evaluator, series: Series = None) -> ndarray:
+    def provide_initial_guess(self, evaluator: Evaluator, series: Series = None) -> tuple[ndarray, int]:
         gammas = [self.const_val] * evaluator.p
         betas = [-self.const_val] * evaluator.p
         initial_angles = np.array(list(it.chain(*zip(gammas, betas))))
-        return initial_angles
+        return initial_angles, 0
 
 
 @dataclass(kw_only=True)
@@ -100,8 +100,11 @@ class GuessProviderSeries(GuessProviderBase):
     """
     Provides initial angles by reading them from specified record in the series.
     :var guess_from: Name of the column from where the corresponding angles will be taken as initial guess.
+    :var cost_from: Name of the column from where the cost of evaluating this guess is taken.
     """
     guess_from: str
+    cost_from: str = None
 
-    def provide_initial_guess(self, evaluator: Evaluator, series: Series = None) -> ndarray:
-        return numpy_str_to_array(series[self.guess_from])
+    def provide_initial_guess(self, evaluator: Evaluator, series: Series) -> tuple[ndarray, int]:
+        nfev = int(series[self.cost_from]) if self.cost_from is not None else 0
+        return numpy_str_to_array(series[self.guess_from]), nfev

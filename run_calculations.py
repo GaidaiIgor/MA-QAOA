@@ -1,6 +1,7 @@
 """ Entry points for large scale parallel calculation functions. """
 
 import os
+import shutil
 from functools import partial
 from os import path
 
@@ -84,7 +85,7 @@ def init_dataframe(data_path: str, worker: WorkerQAOABase, out_path: str):
         df = DataFrame(paths).set_axis(['path'], axis=1)
     elif worker.search_space == 'ma' or worker.search_space == 'ma_subspace':
         df = pd.read_csv(f'{data_path}/output/qaoa/constant/0.2/out.csv')
-        df = df.filter(regex=r'p_\d+_angles')
+        # df = df.filter(regex=r'(path)|(p_\d+_angles)')
     elif isinstance(worker, (WorkerIterativePerturb, WorkerGreedy)):
         df = pd.read_csv(f'{data_path}/output/{worker.search_space}/random/p_1/out.csv')
         prev_nfev = df.filter(regex=r'r_\d_nfev').sum(axis=1).astype(int)
@@ -101,7 +102,7 @@ def run_graphs_parallel():
     nodes = list(range(9, 10))
     depths = list(range(3, 4))
     ps = list(range(1, 6))
-    param_vals = [1]  # np.linspace(0.1, 1, 10)
+    param_vals = np.linspace(0.1, 1, 10)
 
     num_workers = 20
     convergence_threshold = 0.9995
@@ -116,11 +117,11 @@ def run_graphs_parallel():
                     out_path_suffix = f'output/ma_subspace/gradient/qaoa/frac_{param:.1g}/out.csv'
                     out_col = f'p_{p}'
                     # guess_provider = GuessProviderConstant()
-                    guess_provider = GuessProviderSeries(format='qaoa', guess_from=f'p_{p}_angles')
+                    guess_provider = GuessProviderSeries(format='qaoa', guess_from=f'p_{p}_angles', cost_from=f'p_{p}_nfev')
                     transfer_from = None if p == 1 else f'p_{p - 1}'
                     transfer_p = None if p == 1 else p - 1
-                    # dimension_provider = SpaceDimensionProviderRelative(param_fraction=param)
-                    dimension_provider = SpaceDimensionProviderAbsolute(num_dims=param)
+                    # dimension_provider = SpaceDimensionProviderAbsolute(num_dims=param)
+                    dimension_provider = SpaceDimensionProviderRelative(param_fraction=param)
                     # basis_provider = BasisProviderRandom(dimension_provider=dimension_provider)
                     basis_provider = BasisProviderGradient(dimension_provider=dimension_provider, gradient_point_provider=guess_provider)
                     # basis_provider = BasisProviderQAOA(dimension_provider=dimension_provider)

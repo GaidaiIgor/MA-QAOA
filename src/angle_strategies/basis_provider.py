@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from numpy import ndarray, linalg
+from pandas import Series
 
 from src.angle_strategies.guess_provider import GuessProviderBase
 from src.angle_strategies.space_dimension_provider import SpaceDimensionProviderBase
@@ -34,21 +35,23 @@ class BasisProviderBase(ABC):
     dimension_provider: SpaceDimensionProviderBase
 
     @abstractmethod
-    def provide_core_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
+    def provide_core_basis(self, evaluator_ma: Evaluator, series: Series) -> tuple[ndarray, int]:
         """
         Provides initial (incomplete) basis for the subspace of a given MA evaluator according to the current class's strategy.
         :param evaluator_ma: Full-dimensional MA evaluator for a given graph.
+        :param series: Series describing graph instance.
         :return: 1) Basis as a 2D row array; 2) Number of evaluator calls that was made to construct it.
         """
         pass
 
-    def provide_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
+    def provide_basis(self, evaluator_ma: Evaluator, series: Series) -> tuple[ndarray, int]:
         """
-        Provides basis for the subspace of a given MA evaluator according to the current class's strategy.
+        Provides basis for the subspace of full MA space corresponding to a given graph instance according to the current class's strategy.
         :param evaluator_ma: Full-dimensional MA evaluator for a given graph.
+        :param series: Series describing graph instance.
         :return: 1) Basis as a 2D row array; 2) Number of evaluator calls that was made to construct it.
         """
-        basis, nfev = self.provide_core_basis(evaluator_ma)
+        basis, nfev = self.provide_core_basis(evaluator_ma, series)
         full_num_dims = self.dimension_provider.get_number_of_dimensions(evaluator_ma)
         if full_num_dims > basis.shape[0]:
             basis = self.augment_basis_random(basis, full_num_dims - basis.shape[0])
@@ -80,7 +83,7 @@ class BasisProviderBase(ABC):
 class BasisProviderRandom(BasisProviderBase):
     """ Generates random basis for search space. """
 
-    def provide_core_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
+    def provide_core_basis(self, evaluator_ma: Evaluator, series: Series) -> tuple[ndarray, int]:
         return np.empty((0, evaluator_ma.num_angles)), 0
 
 
@@ -88,12 +91,12 @@ class BasisProviderRandom(BasisProviderBase):
 class BasisProviderGradient(BasisProviderBase):
     """
     Generates basis where the first vector is chosen as MA's gradient at the initial point given by the provider. Other vectors are random.
-    :var gradient_point_provider: Object that provides the point where gradient is evaluated.
+    :var gradient_point_provider: Guess provider that specifies the point for gradient's evaluation.
     """
     gradient_point_provider: GuessProviderBase
 
-    def provide_core_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
-        gradient_point = self.gradient_point_provider.provide_guess(evaluator_ma)
+    def provide_core_basis(self, evaluator_ma: Evaluator, series: Series) -> tuple[ndarray, int]:
+        gradient_point, nfev = self.gradient_point_provider.provide_guess(evaluator_ma, series)
         result = optimize_qaoa_angles(evaluator_ma, gradient_point, check_success=False, options={'maxiter': 1})
         gradient = result.x - gradient_point
         gradient /= linalg.norm(gradient)
@@ -105,7 +108,7 @@ class BasisProviderGradient(BasisProviderBase):
 class BasisProviderQAOA(BasisProviderBase):
     """ Generates basis where the first 2*p vectors are chosen as in QAOA. Other vectors are random. """
 
-    def provide_core_basis(self, evaluator_ma: Evaluator) -> tuple[ndarray, int]:
+    def provide_core_basis(self, evaluator_ma: Evaluator, series: Series) -> tuple[ndarray, int]:
         basis = np.zeros((2 * evaluator_ma.p, evaluator_ma.num_angles))
         angles_per_layer = evaluator_ma.num_angles // evaluator_ma.p
         for i in range(evaluator_ma.p):

@@ -95,18 +95,18 @@ class WorkerQAOABase(WorkerExplicit, ABC):
             search_space = self.search_space
         return Evaluator.get_evaluator_standard_maxcut(graph, self.p, search_space=search_space)
 
-    def get_initial_angles(self, evaluator: Evaluator, series: Series, guess_provider: GuessProviderBase = None) -> ndarray:
+    def get_initial_angles(self, evaluator: Evaluator, series: Series, guess_provider: GuessProviderBase = None) -> tuple[ndarray, int]:
         """
         Returns initial angles for the optimization. The number of layers in the guess has to match the current number of layers.
         :param evaluator: Evaluator for which a guess is generated.
         :param series: Series to extract the angles from.
         :param guess_provider: Custom guess provider, or None ot use self.guess_provider.
-        :return: Initial angles for optimization.
+        :return: 1) Initial angles for optimization. 2) Number of QPU calls to obtain these angles.
         """
         if guess_provider is None:
             guess_provider = self.guess_provider
-        initial_angles = guess_provider.provide_guess(evaluator, series)
-        return initial_angles
+        initial_angles, nfev = guess_provider.provide_guess(evaluator, series)
+        return initial_angles, nfev
 
     def optimize_angles(self, evaluator: Evaluator, starting_angles: ndarray) -> OptimizeResult:
         """
@@ -176,11 +176,12 @@ class WorkerQAOABase(WorkerExplicit, ABC):
             path = series['path']
             graph = self.reader(path)
             evaluator = self.get_evaluator(graph)
-            starting_angles = self.get_initial_angles(evaluator, series)
+            starting_angles, nfev = self.get_initial_angles(evaluator, series)
             try:
                 optimization_result = self.optimize_angles(evaluator, starting_angles)
             except Exception:
                 raise Exception(f'Optimization failed at {path}')
+            optimization_result.nfev += nfev
         else:
             optimization_result = None
         new_series = self.update_series(series, optimization_result)
@@ -260,17 +261,17 @@ class WorkerSubspaceMA(WorkerQAOABase):
             path = series['path']
             graph = self.reader(path)
             evaluator_ma = self.get_evaluator(graph, 'ma')
-            basis, nfev = self.basis_provider.provide_basis(evaluator_ma)
-            shift = self.get_initial_angles(evaluator_ma, series)
+            basis, nfev_basis = self.basis_provider.provide_basis(evaluator_ma, series)
+            shift, nfev_shift = self.get_initial_angles(evaluator_ma, series)
             search_space = SearchSpace(basis, shift)
             evaluator = self.get_evaluator(graph, search_space)
             initial_angles = np.array([0] * evaluator.num_angles)
             try:
                 optimization_result = self.optimize_angles(evaluator, initial_angles)
-                optimization_result.x = search_space.transform_coordinates(optimization_result.x)
-                optimization_result.nfev += nfev
             except Exception:
                 raise Exception(f'Optimization failed at {path}')
+            optimization_result.x = search_space.transform_coordinates(optimization_result.x)
+            optimization_result.nfev += nfev_basis + nfev_shift
         else:
             optimization_result = None
         new_series = self.update_series(series, optimization_result)
