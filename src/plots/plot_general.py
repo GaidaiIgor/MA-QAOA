@@ -8,10 +8,13 @@ from typing import Sequence
 import distinctipy
 import numpy as np
 from matplotlib import pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.patches import Ellipse
 from matplotlib.ticker import MultipleLocator
 from numpy import ndarray
 
-colors = [(0, 0, 1), (1, 0, 0), (0, 0.5, 0), (0, 0, 0), (0, 0.75, 0.75), (0.75, 0, 0.75), (0.75, 0.75, 0)]
+colors = [(0, 0, 1), (1, 0, 0), (0, 0.5, 0), (0, 0, 0), (0, 0.75, 0.75), (0.75, 0, 0.75), (0.75, 0.75, 0), (1, 0.5, 0), (0.58, 0.4, 0.74), (0.55, 0.34, 0.29), (0.89, 0.47, 0.76),
+          (0.5, 0.5, 0.5)]
 colors += distinctipy.get_colors(10, colors + [(1, 1, 1)])
 markers = 'o*Xvs'
 marker_sizes = {'o': 5, '*': 8, 'X': 5, 'v': 5, 's': 5, 'none': 0}
@@ -73,6 +76,19 @@ def assign_distinct_colors(lines: list[Line]):
         lines[i].color = colors[i]
 
 
+def pick_event_handler(event):
+    if isinstance(event.artist, Line2D):
+        x = event.artist.get_xdata()[event.ind][0]
+        y = event.artist.get_ydata()[event.ind][0]
+        bbox_settings = dict(boxstyle='round', fc=(1.0, 0.7, 0.7), ec='none')
+        arrow_settings = dict(arrowstyle='wedge, tail_width=1', fc=(1.0, 0.7, 0.7), ec='none', patchA=None, patchB=Ellipse((2, -1), 0.5, 0.5), relpos=(0.2, 0.5))
+        annotation = event.artist.axes.annotate(f'({x:.3g}, {y:.3g})', xy=(x, y), xytext=(20, 20), textcoords='offset points', size=10, bbox=bbox_settings,
+                                                arrowprops=arrow_settings)
+        annotation.draggable()
+        event.canvas.draw()
+        print(x, y)
+
+
 def plot_general(lines: list[Line], axis_labels: tuple[str | None, str | None] = None, tick_multiples: tuple[float | None, float | None] = None,
                  boundaries: tuple[float | None, float | None, float | None, float | None] = None, font_size: int = 20, legend_loc: str = 'best', figure_id: int = None, **kwargs):
     """
@@ -88,14 +104,15 @@ def plot_general(lines: list[Line], axis_labels: tuple[str | None, str | None] =
     """
     if figure_id is None:
         new_figure = True
-        plt.figure()
+        fig = plt.figure()
     else:
         new_figure = plt.fignum_exists(figure_id)
-        plt.figure(figure_id)
+        fig = plt.figure(figure_id)
+    fig.canvas.mpl_connect('pick_event', pick_event_handler)
 
     plt.rcParams.update({'font.size': font_size})
     for line in lines:
-        plt.plot(line.xs, line.ys, color=line.color, marker=line.marker, linestyle=line.style, markersize=marker_sizes[line.marker], label=line.label)
+        plt.plot(line.xs, line.ys, color=line.color, marker=line.marker, linestyle=line.style, markersize=marker_sizes[line.marker], label=line.label, picker=5)
         if line.label != '_nolabel_':
             plt.legend(loc=legend_loc, draggable=True)
 
