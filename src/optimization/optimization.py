@@ -1,12 +1,11 @@
 """ Functions related to optimization of QAOA angles. """
-from __future__ import annotations
-
 import logging
 import time
 
 import numpy as np
 import numpy.random as random
 from numpy import ndarray
+from pandas import Series
 from scipy import optimize
 from scipy.optimize import OptimizeResult
 
@@ -16,7 +15,7 @@ from src.optimization.evaluator import Evaluator, change_sign
 
 def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, method: str = 'L-BFGS-B', check_success: bool = True, try_nelder_mead: bool = None,
                          options: dict = None, num_restarts: int = 1, objective_max: float = None, objective_tolerance: float = 0.9995, normalize_angles: bool = True,
-                         **kwargs) -> OptimizeResult:
+                         series: Series = None, **kwargs) -> OptimizeResult:
     """
     Maximizes evaluator function (MaxCut expectation).
     :param evaluator: Evaluator instance.
@@ -29,6 +28,7 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, 
     :param objective_max: Maximum achievable objective. Optimization stops if answer sufficiently close to max_objective is achieved.
     :param objective_tolerance: Fraction of 1 that controls how close the result need to be to objective_max before optimization can be stopped.
     :param normalize_angles: True to return optimized angles to the [-pi; pi] range.
+    :param series: Series with additional information for optimization.
     :param kwargs: Keyword arguments for optimizer.
     :return: Maximization result.
     """
@@ -42,7 +42,8 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, 
 
     if options is None:
         maxint = np.iinfo(np.int32).max
-        options = {'maxiter': maxint, 'maxfun': maxint}
+        key = 'maxfun' if method == 'TNC' else 'maxiter'
+        options = {key: maxint}
 
     logger = logging.getLogger('QAOA')
     logger.debug('Optimization...')
@@ -50,7 +51,7 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, 
 
     result_best = None
     for i in range(num_restarts):
-        next_angles = random.uniform(-np.pi, np.pi, evaluator.num_angles) if starting_angles is None else starting_angles
+        next_angles = random.uniform(-np.pi / 2, np.pi / 2, evaluator.num_angles) if starting_angles is None else starting_angles
         result = optimize.minimize(change_sign(evaluator.func), next_angles, method=method, options=options, **kwargs)
         if check_success and not result.success:
             logger.warning(f'Optimization with {method} failed with the following message:')

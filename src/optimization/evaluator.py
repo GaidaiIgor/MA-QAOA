@@ -16,8 +16,6 @@ from src.graph_utils import get_index_edge_list
 from src.preprocessing import evaluate_all_cuts, evaluate_z_term, PSubset
 from src.simulation.plain import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
 
-call_counter = 0
-
 
 @dataclass
 class Evaluator:
@@ -153,10 +151,8 @@ class Evaluator:
         :param angles: Array of angles.
         :return: Expectation.
         """
-        global call_counter
         if len(angles) != self.num_angles:
             raise Exception('Wrong number of angles')
-        call_counter += 1
         result = self.func(angles)
         return result
 

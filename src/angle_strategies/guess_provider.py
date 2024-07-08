@@ -103,7 +103,7 @@ class GuessProviderSeries(GuessProviderBase):
     :var cost_from: Name of the column from where the cost of evaluating this guess is taken.
     """
     guess_from: str
-    cost_from: str = None
+    cost_from: str | None = None
 
     def provide_initial_guess(self, evaluator: Evaluator, series: Series) -> tuple[ndarray, int]:
         nfev = int(series[self.cost_from]) if self.cost_from is not None else 0

@@ -270,6 +270,17 @@ def plot_ar_vs_p_fitted_nodes():
     save_figure()
 
 
+def plot_ar_vs_p_optimizers():
+    line_labels = ['L-BFGS-B', 'Nelder-Mead', 'Powell', 'CG', 'BFGS', 'TNC', 'COBYLA', 'COBYQA', 'SLSQP', 'trust-constr']
+    methods = [f'qaoa/constant/0.2/{method}' for method in line_labels]
+    x_func = DataExtractor.get_cost_average
+    y_func = lambda extractor: DataExtractor.get_ar_aggregated(extractor, np.mean)
+    axis_labels = ('cost', 'AR')
+    boundaries = (-5000, 100000, 0.75, 1)
+    colors = range(0, len(methods) + 1)
+    plot_methods_9_nodes_general(methods, x_func, y_func, axis_labels=axis_labels, boundaries=boundaries, line_labels=line_labels, colors=colors, tick_multiples=(20000, None))
+
+
 if __name__ == "__main__":
     # plot_ar_vs_p_heuristics_qaoa_attempts_1()
     # plot_ar_vs_p_heuristics_qaoa_attempts_p()
@@ -281,7 +292,8 @@ if __name__ == "__main__":
     # plot_relax_random_ar_difference_vs_p_nodes()
     # plot_relax_random_ar_difference_vs_p_depths()
     # plot_ar_vs_p_constant()
-    plot_ar_vs_cost_qaoa_heuristics()
+    # plot_ar_vs_cost_qaoa_heuristics()
     # plot_ar_vs_p_fitted_nodes()
+    plot_ar_vs_p_optimizers()
 
     plt.show()

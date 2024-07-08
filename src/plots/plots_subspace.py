@@ -20,9 +20,9 @@ def plot_ar_vs_cost_subspace():
         param_vals = [0.1 * i for i in range(11)]
         line_labels = [f'Subspace p = {i}' for i in range(1, max_p + 1)]
     else:
-        param_vals = [0.1 * i for i in range(11)]
+        param_vals = [0.2 * i for i in range(6)]
         line_labels = [f'Subspace {param:.1g}' for param in param_vals]
-    methods = [f'ma_subspace/qaoa/frac_{param:.1g}' for param in param_vals]
+    methods = [f'ma_subspace/random/frac_{param:.1g}' for param in param_vals]
     plot_methods_9_nodes_general(methods, x_func, y_func, max_p=max_p, transpose=transpose, line_labels=line_labels, colors=range(1, len(methods) + 1), figure_id=0)
 
 

@@ -10,6 +10,9 @@ from src.graph_utils import get_index_edge_list
 from src.preprocessing import PSubset, evaluate_edge_cut
 
 
+call_counter = 0
+
+
 @njit
 def apply_driver(term_angles: ndarray, term_vals: ndarray, psi: ndarray) -> ndarray:
     """
@@ -140,6 +143,9 @@ def calc_expectation_general_qaoa(angles: ndarray, driver_term_vals: ndarray, p:
     :param apply_y: True to apply a layer of Y-mixers with the same angles.
     :return: Expectation value of the target function in the state corresponding to the given parameters and terms.
     """
+    global call_counter
+    call_counter += 1
+
     psi = construct_qaoa_state(angles, driver_term_vals, p, apply_y)
     expectation = calc_expectation_diagonal(psi, target_vals)
     return expectation

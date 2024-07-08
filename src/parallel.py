@@ -108,14 +108,15 @@ class WorkerQAOABase(WorkerExplicit, ABC):
         initial_angles, nfev = guess_provider.provide_guess(evaluator, series)
         return initial_angles, nfev
 
-    def optimize_angles(self, evaluator: Evaluator, starting_angles: ndarray) -> OptimizeResult:
+    def optimize_angles(self, evaluator: Evaluator, series: Series, starting_angles: ndarray) -> OptimizeResult:
         """
         Optimizes angles.
         :param evaluator: Expectation evaluator.
+        :param series: Series describing data item.
         :param starting_angles: Starting angles for optimization.
         :return: Optimization result.
         """
-        optimization_result = optimize_qaoa_angles(evaluator, starting_angles=starting_angles)
+        optimization_result = optimize_qaoa_angles(evaluator, starting_angles=starting_angles, series=series)
         return optimization_result
 
     def write_standard(self, series: Series, optimization_result: OptimizeResult):
@@ -178,7 +179,7 @@ class WorkerQAOABase(WorkerExplicit, ABC):
             evaluator = self.get_evaluator(graph)
             starting_angles, nfev = self.get_initial_angles(evaluator, series)
             try:
-                optimization_result = self.optimize_angles(evaluator, starting_angles)
+                optimization_result = self.optimize_angles(evaluator, series, starting_angles)
             except Exception:
                 raise Exception(f'Optimization failed at {path}')
             optimization_result.nfev += nfev
@@ -267,7 +268,7 @@ class WorkerSubspaceMA(WorkerQAOABase):
             evaluator = self.get_evaluator(graph, search_space)
             initial_angles = np.array([0] * evaluator.num_angles)
             try:
-                optimization_result = self.optimize_angles(evaluator, initial_angles)
+                optimization_result = self.optimize_angles(evaluator, series, initial_angles)
             except Exception:
                 raise Exception(f'Optimization failed at {path}')
             optimization_result.x = search_space.transform_coordinates(optimization_result.x)
@@ -321,7 +322,7 @@ class WorkerMultipleRepeats(WorkerQAOABase, ABC):
             initial_angles = self.get_initial_angles_all(evaluator, series)
             for i in range(self.num_repeats):
                 try:
-                    optimization_results[i] = self.optimize_angles(evaluator, initial_angles[i, :])
+                    optimization_results[i] = self.optimize_angles(evaluator, series, initial_angles[i, :])
                 except Exception:
                     raise Exception(f'Optimization failed at {path}')
         else:
@@ -522,7 +523,7 @@ class WorkerSequentialRepeater(WorkerSequential):
                     next_angles = updated_series[worker.out_col + '_angles']
                     similar = [max(abs(next_angles - angles)) < self.similarity_threshold for angles in tried_angles[j]]
                     if any(similar):
-                        next_angles = random.uniform(-np.pi, np.pi, len(next_angles))
+                        next_angles = random.uniform(-np.pi / 2, np.pi / 2, len(next_angles))
                         updated_series[worker.out_col + '_angles'] = next_angles
                     else:
                         tried_angles[j].add(next_angles)

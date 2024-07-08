@@ -1,6 +1,7 @@
 """ Entry points for large scale parallel calculation functions. """
 
 import os
+import numpy.random as random
 import shutil
 from functools import partial
 from os import path
@@ -15,7 +16,7 @@ from src.angle_strategies.guess_provider import GuessProviderConstant, GuessProv
 from src.angle_strategies.space_dimension_provider import SpaceDimensionProviderRelative, SpaceDimensionProviderAbsolute
 from src.data_processing import merge_dfs, numpy_str_to_array
 from src.graph_utils import get_max_edge_depth, is_isomorphic
-from src.parallel import optimize_expectation_parallel, WorkerGreedy, WorkerSubspaceMA, WorkerQAOABase, WorkerIterativePerturb
+from src.parallel import optimize_expectation_parallel, WorkerGreedy, WorkerSubspaceMA, WorkerQAOABase, WorkerIterativePerturb, WorkerStandard
 
 
 def generate_graphs():
@@ -79,6 +80,17 @@ def generate_graphs():
         nx.write_gml(graphs[i], f'{out_path}/{i}.gml')
 
 
+def generate_random_initial_guesses():
+    num_graphs = 1000
+    ps = list(range(1, 9))
+    data_path = 'graphs/main/nodes_9/depth_3'
+    df = pd.DataFrame()
+    df['path'] = [f'{data_path}/{i}.gml' for i in range(num_graphs)]
+    for p in ps:
+        df[f'p_{p}_angles'] = [random.uniform(-np.pi / 2, np.pi / 2, 2 * p) for _ in range(num_graphs)]
+    df.to_csv(f'{data_path}/output/qaoa/random/attempts_1/nelder-mead/out.csv', index=False)
+
+
 def init_dataframe(data_path: str, worker: WorkerQAOABase, out_path: str):
     if not isinstance(worker.guess_provider, GuessProviderSeries):
         paths = [f'{data_path}/{i}.gml' for i in range(1000)]
@@ -102,7 +114,8 @@ def run_graphs_parallel():
     nodes = list(range(9, 10))
     depths = list(range(3, 4))
     ps = list(range(1, 6))
-    param_vals = np.linspace(0.1, 1, 10)
+    # param_vals = np.linspace(0.1, 1, 10)
+    param_vals = [None]
 
     num_workers = 20
     convergence_threshold = 0.9995
@@ -114,27 +127,31 @@ def run_graphs_parallel():
             for param in param_vals:
                 print(f'Param: {param}')
                 for p in ps:
-                    out_path_suffix = f'output/ma_subspace/gradient/qaoa/frac_{param:.1g}/out.csv'
+                    # out_path_suffix = f'output/ma_subspace/gradient/qaoa/frac_{param:.1g}/out.csv'
+                    out_path_suffix = f'output/qaoa/constant/0.2/basinhopping/out.csv'
                     out_col = f'p_{p}'
-                    # guess_provider = GuessProviderConstant()
-                    guess_provider = GuessProviderSeries(format='qaoa', guess_from=f'p_{p}_angles', cost_from=f'p_{p}_nfev')
                     transfer_from = None if p == 1 else f'p_{p - 1}'
                     transfer_p = None if p == 1 else p - 1
+
+                    guess_provider = GuessProviderConstant()
+                    # guess_provider = GuessProviderSeries(format='qaoa', guess_from=f'p_{p}_angles', cost_from=None)
+
                     # dimension_provider = SpaceDimensionProviderAbsolute(num_dims=param)
-                    dimension_provider = SpaceDimensionProviderRelative(param_fraction=param)
+                    # dimension_provider = SpaceDimensionProviderRelative(param_fraction=param)
                     # basis_provider = BasisProviderRandom(dimension_provider=dimension_provider)
-                    basis_provider = BasisProviderGradient(dimension_provider=dimension_provider, gradient_point_provider=guess_provider)
+                    # basis_provider = BasisProviderGradient(dimension_provider=dimension_provider, gradient_point_provider=guess_provider)
                     # basis_provider = BasisProviderQAOA(dimension_provider=dimension_provider)
-                    worker_subspace = WorkerSubspaceMA(out_col=out_col, reader=reader, p=p, guess_provider=guess_provider, transfer_from=transfer_from, transfer_p=transfer_p,
-                                                       basis_provider=basis_provider)
-                    worker = worker_subspace
+                    # worker_subspace = WorkerSubspaceMA(out_col=out_col, reader=reader, p=p, guess_provider=guess_provider, transfer_from=transfer_from, transfer_p=transfer_p,
+                    #                                    basis_provider=basis_provider)
+                    worker = WorkerStandard(out_col=out_col, reader=reader, p=p, guess_provider=guess_provider, transfer_from=transfer_from, transfer_p=transfer_p,
+                                            search_space='qaoa')
 
                     data_path = f'graphs/main/nodes_{node}/depth_{depth}/'
                     out_path = data_path + out_path_suffix
 
                     rows_func = lambda df: np.ones((df.shape[0], ), dtype=bool) if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
                     # mask = np.zeros((1000, 1), dtype=bool)
-                    # mask[:] = True
+                    # mask[36:] = True
                     # rows_func = lambda df: mask
 
                     out_folder = path.split(out_path)[0]
@@ -184,6 +201,7 @@ if __name__ == '__main__':
     np.set_printoptions(threshold=np.inf, linewidth=np.inf)
 
     # generate_graphs()
+    # generate_random_initial_guesses()
     run_graphs_parallel()
     # run_merge()
     # run_correct()
