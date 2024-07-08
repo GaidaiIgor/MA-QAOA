@@ -10,7 +10,18 @@ from scipy import optimize
 from scipy.optimize import OptimizeResult
 
 from src.data_processing import normalize_qaoa_angles
-from src.optimization.evaluator import Evaluator, change_sign
+from src.optimization.evaluator import Evaluator
+
+
+def change_sign(func: callable) -> callable:
+    """
+    Decorator to change sign of the return value of a given function. Useful to carry out maximization instead of minimization.
+    :param func: Function whose sign is to be changed.
+    :return: Function with changed sign.
+    """
+    def func_changed_sign(*args, **kwargs):
+        return -func(*args, **kwargs)
+    return func_changed_sign
 
 
 def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, method: str = 'L-BFGS-B', check_success: bool = True, try_nelder_mead: bool = None,

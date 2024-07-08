@@ -1,3 +1,4 @@
+""" Functions for Bayesian optimizations. """
 from itertools import count
 
 import numpy as np

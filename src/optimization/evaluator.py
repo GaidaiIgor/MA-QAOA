@@ -1,5 +1,4 @@
 """ Module with Evaluator class. """
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -140,10 +139,12 @@ class Evaluator:
         func = lambda angles: calc_expectation_ma_qaoa_analytical_p1(angles, graph, edge_list)
         if use_multi_angle:
             num_angles = len(graph.edges) + len(graph)
+            search_space = 'ma'
         else:
             func = qaoa_decorator(func, len(graph.edges), len(graph))
             num_angles = 2
-        return Evaluator(change_sign(func), num_angles)
+            search_space = 'qaoa'
+        return Evaluator(func, num_angles, search_space, 1, len(graph), len(edge_list))
 
     def evaluate(self, angles: ndarray) -> float:
         """
@@ -165,14 +166,3 @@ class Evaluator:
         """
         self.func = fix_angles(self.func, self.num_angles, inds, values)
         self.num_angles -= len(inds)
-
-
-def change_sign(func: callable) -> callable:
-    """
-    Decorator to change sign of the return value of a given function. Useful to carry out maximization instead of minimization.
-    :param func: Function whose sign is to be changed.
-    :return: Function with changed sign.
-    """
-    def func_changed_sign(*args, **kwargs):
-        return -func(*args, **kwargs)
-    return func_changed_sign
