@@ -47,23 +47,18 @@ class EvaluatorQiskit(Evaluator):
         service = QiskitRuntimeService()
         backend = service.get_backend('ibm_osaka')
 
-        ansatz_transpiled = qiskit.transpile(ansatz, backend, optimization_level=2)
+        ansatz_transpiled = qiskit.transpile(ansatz, backend, optimization_level=3)
+        observable = observable.apply_layout(ansatz_transpiled.layout)
+
         dag = converters.circuit_to_dag(ansatz_transpiled)
         idle_qubits = list(dag.idle_wires())
         qubits_used = dag.num_qubits() - len(idle_qubits)
         print(f'Qubits: {qubits_used}; Depth: {ansatz_transpiled.depth()}')
-        # ansatz = ansatz_transpiled
-        # observable = observable.apply_layout(ansatz_transpiled.layout)
-        # ansatz_transpiled.draw(output='mpl', style='iqp', idle_wires=False)
-        # plt.show()
 
         session = Session(backend=backend)
         options = Options()
-        options.transpilation.skip_transpilation = False
-        options.optimization_level = 2
         options.resilience_level = 2
         estimator = IbmEstimator(session=session, options=options)
 
-        func = lambda angles: evaluate_angles_ma_qiskit(angles, ansatz, estimator, observable)
+        func = lambda angles: evaluate_angles_ma_qiskit(angles, ansatz_transpiled, estimator, observable)
         return Evaluator.wrap_parameter_strategy(func, len(graph), len(graph.edges), p, search_space)
-

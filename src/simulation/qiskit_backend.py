@@ -70,7 +70,7 @@ def evaluate_angles_ma_qiskit(angles: ndarray, ansatz: QuantumCircuit, estimator
     :param hamiltonian: Target Hamiltonian.
     :return: Maxcut expectation value.
     """
-    bound_circuit = ansatz.bind_parameters(angles)
+    bound_circuit = ansatz.assign_parameters(angles)
     try:
         job = estimator.run(bound_circuit, hamiltonian)
     except IBMRuntimeError:
