@@ -24,7 +24,7 @@ def change_sign(func: callable) -> callable:
     return func_changed_sign
 
 
-def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, method: str = 'L-BFGS-B', check_success: bool = True, try_nelder_mead: bool = None,
+def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, method: str = 'SLSQP', check_success: bool = True, try_nelder_mead: bool = None,
                          options: dict = None, num_restarts: int = 1, objective_max: float = None, objective_tolerance: float = 0.9995, normalize_angles: bool = True,
                          series: Series = None, **kwargs) -> OptimizeResult:
     """
