@@ -6,7 +6,11 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
+from src.angle_strategies.guess_provider import GuessProviderConstant
+from src.angle_strategies.search_space import SearchSpaceControlled
 from src.optimization.evaluator import Evaluator
+from src.optimization.evaluator_qiskit import EvaluatorQiskit
+from src.optimization.optimization import optimize_qaoa_angles
 from src.preprocessing import evaluate_all_cuts
 
 
@@ -30,80 +34,45 @@ def run_add_graph():
 
 
 def run_point():
-    graph = nx.read_gml('graphs/other/simple/n3_e3.gml', destringizer=int)
-    p = 1
+    target_vals = np.array([0, 5, 1, 0])
+    driver_term_vals = np.diag(target_vals)
+    p = 2
+    search_space = SearchSpaceControlled()
+    # point = np.array([np.pi / 2, 0.392699081698724])
+    point = np.array([0, np.pi/10, np.pi/2, 0, np.pi/4, np.pi/4, 0, 0] + [0, 0, 0, 0, 0, np.pi/2, 0, -np.pi/4])
+    evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, search_space)
+    print(evaluator.evaluate(point))
 
-    for i in range(10):
-        print(f'Run: {i}')
-        # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space='ma')
-        evaluator = Evaluator.get_evaluator_standard_maxcut_qiskit_simulator(graph, p, search_space='ma')
-        # evaluator = Evaluator.get_evaluator_standard_maxcut_qiskit_hardware(graph, p, search_space='ma')
-        point = np.array(np.linspace(-np.pi, np.pi, evaluator.num_angles))
-        res = evaluator.evaluate(point)
-        print(f'Result: {res}')
+
+def run_point_ibm():
+    # graph = nx.read_gml('graphs/other/simple/n3_e3.gml', destringizer=int)
+    graph = nx.complete_graph(24)
+    p = 1
+    point = np.array([0.2, -0.2])
+    search_space = 'qaoa'
+    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
+    # evaluator = EvaluatorQiskit.get_evaluator_standard_maxcut_qiskit_simulator(graph, p, search_space=search_space)
+    evaluator = EvaluatorQiskit.get_evaluator_standard_maxcut_qiskit_hardware(graph, p, search_space=search_space)
+
+    for i in range(1):
+        print(evaluator.evaluate(point))
 
 
 def run_optimization():
-    graph = nx.read_gml('graphs/other/simple/n8_crand_example.gml', destringizer=int)
-    p = 3
+    target_vals = np.array([0, 5, 1, 0])
+    driver_term_vals = np.diag(target_vals)
+    p = 2
+    search_space = 'ma'
 
-    # search_space = 'qaoa'
-    # starting_point = np.array([0.2, -0.2] * p)
-
-    # search_space = 'ma'
-    starting_point = np.array(([0.2] * 10 + [-0.2] * 8) * p)
-
-    # evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
-
-    # gradient = nd.Gradient(evaluator.evaluate, 0.01)(starting_point)
-    # print(optimization.call_counter)
-    # result = optimize_qaoa_angles(evaluator, starting_angles=starting_point, options={'maxiter': 1})
-    # print(f'Budget: {result.nfev}')
-    # gradient = result.x - starting_point
-
-    # num_attempts = 1000
-    # stats = np.zeros((2, num_attempts))
-    # for i in range(num_attempts):
-    #     # basis = np.array([gradient])
-    #     basis = np.empty((0, len(starting_point)))
-    #     search_space = SearchSpace(basis, starting_point)
-    #     search_space.augment_basis(13)
-    #     evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
-    #     starting_point_new = np.array([0] * evaluator.num_angles)
-    #     result = optimize_qaoa_angles(evaluator, starting_angles=starting_point_new)
-    #     stats[0, i] = -result.fun / graph.graph["max_cut"]
-    #     stats[1, i] = result.nfev
-    # stats_avg = [np.mean(stats[0, :]), np.min(stats[0, :]), np.max(stats[0, :]), np.mean(stats[1, :]), np.min(stats[1, :]), np.max(stats[1, :])]
-    # print(stats_avg)
-
-    # target_vals = evaluate_graph_cut(graph)
-    # driver_edges = np.array([[0, 1], [2, 3], [4, 5]])
-    # driver_term_vals = np.array([evaluate_z_term(driver_edge, len(graph)) for driver_edge in driver_edges])
-    # # driver_term_vals = np.array([evaluate_z_term(edge, len(graph)) for edge in get_index_edge_list(graph)])
-    # # driver_term_vals = np.array([evaluate_z_term(np.array([node]), len(graph)) for node in range(len(graph))])
-    # evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, search_space)
-
-    # target_terms = [set(edge) for edge in get_index_edge_list(graph)]
-    # target_term_coeffs = [-1 / 2] * len(graph.edges) + [len(graph.edges) / 2]
-    # # driver_terms = [set(edge) for edge in get_index_edge_list(graph)]
-    # # driver_terms = [set(term) for term in it.combinations(range(len(graph)), 1)]
-    # # driver_terms = [set(term) for term in it.chain(it.combinations(range(len(graph)), 1), it.combinations(range(len(graph)), 2))]
-    # evaluator = Evaluator.get_evaluator_general_subsets(len(graph), target_terms, target_term_coeffs, driver_terms, p)
-
-    # result = optimize_qaoa_angles(evaluator, starting_angles=starting_point)
-    # print(f'Budget: {result.nfev}')
-    # print(f'Best AR: {-result.fun / graph.graph["max_cut"]}')
-    # print(f'Maximizing angles: {repr(result.x)}')
-    # print('Done')
-
-    # evaluator = Evaluator.get_evaluator_standard_maxcut_qiskit_simulator(graph, p, search_space)
-    # results = [None] * 1
-    # for i in range(len(results)):
-    #     print(f'\rIteration: {i}', end='')
-    #     results[i] = optimize_qaoa_angles(evaluator, starting_angles=starting_point, method='cobyla')
-    # print(f'\nAvg func: {np.mean([-res.fun for res in results])}')
-    # print(f'Std func: {np.std([-res.fun for res in results])}')
-    # print(f'Avg budget: {np.mean([res.nfev for res in results])}')
+    evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, search_space)
+    # evaluator.fix_params([0, 1], [np.pi / 2, 0.392699081698724])
+    evaluator.fix_params(list(range(6)), [0, np.pi/10, np.pi/2, 0, np.pi/4, 0])
+    guess_provider = GuessProviderConstant()
+    starting_angles = guess_provider.provide_guess(evaluator)[0][6:]
+    # starting_angles = np.array([0, np.pi/10, np.pi/2, 0, np.pi/4, np.pi/4])
+    res = optimize_qaoa_angles(evaluator, starting_angles)
+    print(res)
+    print(repr(res.x))
 
 
 def run_draw_graph():
@@ -122,7 +91,8 @@ if __name__ == '__main__':
     start = time.perf_counter()
     # run_add_graph()
     # run_point()
-    run_optimization()
+    run_point_ibm()
+    # run_optimization()
     # run_draw_graph()
     end = time.perf_counter()
     print(f'Elapsed time: {end - start}')

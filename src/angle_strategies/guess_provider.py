@@ -8,7 +8,8 @@ from numpy import ndarray
 from numpy import random
 from pandas import Series
 
-from src.angle_strategies.direct import convert_angles_tqa_to_qaoa, convert_angles_linear_to_qaoa, convert_angles_qaoa_to_ma
+from src.angle_strategies.direct import convert_angles_tqa_to_qaoa, convert_angles_linear_to_qaoa, convert_angles_qaoa_to_ma, convert_angles_qaoa_to_controlled_ma
+from src.angle_strategies.search_space import SearchSpaceControlled
 from src.data_processing import numpy_str_to_array
 from src.optimization.optimization import Evaluator
 
@@ -48,7 +49,12 @@ class GuessProviderBase(ABC):
                     raise Exception('Unknown angle conversion')
             elif evaluator.search_space == 'ma':
                 if self.format == 'qaoa':
-                    angles = convert_angles_qaoa_to_ma(angles, evaluator.num_driver_terms, evaluator.num_qubits)
+                    angles = convert_angles_qaoa_to_ma(angles, evaluator.num_phase_terms, evaluator.num_qubits)
+                else:
+                    raise Exception('Unknown angle conversion')
+            elif isinstance(evaluator.search_space, SearchSpaceControlled):
+                if self.format == 'qaoa':
+                    angles = convert_angles_qaoa_to_controlled_ma(angles, evaluator.num_phase_terms, evaluator.num_qubits)
                 else:
                     raise Exception('Unknown angle conversion')
             else:

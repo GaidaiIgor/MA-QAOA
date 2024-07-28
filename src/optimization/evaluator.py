@@ -10,7 +10,7 @@ from numpy import ndarray
 
 from src.analytical import calc_expectation_ma_qaoa_analytical_p1
 from src.angle_strategies.direct import tqa_decorator, qaoa_decorator, linear_decorator, fourier_decorator, fix_angles
-from src.angle_strategies.search_space import SearchSpace
+from src.angle_strategies.search_space import SearchSpaceGeneral, SearchSpaceControlled, SearchSpace
 from src.graph_utils import get_index_edge_list
 from src.preprocessing import evaluate_all_cuts, evaluate_z_term, PSubset
 from src.simulation.plain import calc_expectation_general_qaoa, calc_expectation_general_qaoa_subsets
@@ -24,47 +24,49 @@ class Evaluator:
     :var num_angles: Number of elements in the 1D array expected by func.
     :var search_space: Name of the search space or instance of SearchSpace.
     :var p: Number of QAOA layers.
+    :var num_qubits: Number of qubits.
+    :var num_phase_terms: Number of terms in the phase operator.
     """
     func: Callable[[ndarray], float]
     num_angles: int
     search_space: str | SearchSpace
     p: int
     num_qubits: int
-    num_driver_terms: int
+    num_phase_terms: int
 
     @staticmethod
-    def wrap_parameter_strategy(ma_qaoa_func: callable, num_qubits: int, num_driver_terms: int, p: int, search_space: str | SearchSpace = 'ma') -> Evaluator:
+    def wrap_parameter_strategy(ma_qaoa_func: callable, num_qubits: int, num_phase_terms: int, p: int, search_space: str | SearchSpace = 'ma') -> Evaluator:
         """
         Wraps MA-QAOA function input according to the specified angle strategy.
         :param ma_qaoa_func: MA-QAOA function of angles only to be maximized.
         :param num_qubits: Number of qubits.
-        :param num_driver_terms: Number of terms in the driver function.
+        :param num_phase_terms: Number of terms in the phase function.
         :param p: Number of QAOA layers.
         :param search_space: Name of the search space to use or SearchSpace instance for custom search spaces.
         :return: Simulation evaluator. The order of input parameters is according to the angle strategy.
         """
         if search_space == 'tqa':
             num_angles = 1
-            ma_qaoa_func = tqa_decorator(qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits), p)
+            ma_qaoa_func = tqa_decorator(qaoa_decorator(ma_qaoa_func, num_phase_terms, num_qubits), p)
         elif search_space == 'linear':
             num_angles = 4
-            ma_qaoa_func = linear_decorator(qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits), p)
+            ma_qaoa_func = linear_decorator(qaoa_decorator(ma_qaoa_func, num_phase_terms, num_qubits), p)
         elif search_space == 'qaoa' or search_space == 'fourier':
             num_angles = 2 * p
-            ma_qaoa_func = qaoa_decorator(ma_qaoa_func, num_driver_terms, num_qubits)
+            ma_qaoa_func = qaoa_decorator(ma_qaoa_func, num_phase_terms, num_qubits)
             if search_space == 'fourier':
                 ma_qaoa_func = fourier_decorator(ma_qaoa_func)
         elif search_space == 'ma' or search_space == 'general' or search_space == 'xqaoa':
-            num_angles = (num_driver_terms + num_qubits) * p
+            num_angles = (num_phase_terms + num_qubits) * p
         elif isinstance(search_space, SearchSpace):
-            num_angles = search_space.basis.shape[0]
-            ma_qaoa_func = search_space.apply_interface(ma_qaoa_func)
+            num_angles = search_space.get_num_angles(num_phase_terms, num_qubits, p)
+            ma_qaoa_func = search_space.apply_interface(ma_qaoa_func, num_phase_terms, num_qubits, p)
         else:
             raise 'Unknown search space'
-        return Evaluator(ma_qaoa_func, num_angles, search_space, p, num_qubits, num_driver_terms)
+        return Evaluator(ma_qaoa_func, num_angles, search_space, p, num_qubits, num_phase_terms)
 
     @staticmethod
-    def get_evaluator_general(target_vals: ndarray, driver_term_vals: ndarray, p: int, search_space: str = 'general') -> Evaluator:
+    def get_evaluator_general(target_vals: ndarray, driver_term_vals: ndarray, p: int, search_space: str | SearchSpace = 'general') -> Evaluator:
         """
         Returns evaluator of target expectation calculated through simulation.
         :param target_vals: Values of the target function at each computational basis.
@@ -74,8 +76,14 @@ class Evaluator:
         :return: Simulation evaluator. The order of input parameters: first, driver term angles for 1st layer in the same order as rows of driver_term_vals,
         then mixer angles for 1st layer in the qubits order, then the same format repeats for other layers.
         """
-        apply_y = search_space == 'xqaoa'
-        func = lambda angles: calc_expectation_general_qaoa(angles, driver_term_vals, p, target_vals, apply_y)
+        if search_space == 'xqaoa':
+            mixer_type = 'x+y'
+        elif isinstance(search_space, SearchSpaceControlled):
+            mixer_type = 'controlled'
+        else:
+            mixer_type = 'standard'
+
+        func = lambda angles: calc_expectation_general_qaoa(angles, driver_term_vals, p, target_vals, mixer_type)
         num_qubits = len(target_vals).bit_length() - 1
         return Evaluator.wrap_parameter_strategy(func, num_qubits, driver_term_vals.shape[0], p, search_space)
 

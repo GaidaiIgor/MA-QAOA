@@ -13,6 +13,7 @@ from pandas import DataFrame
 
 from src.angle_strategies.basis_provider import BasisProviderRandom, BasisProviderGradient, BasisProviderQAOA
 from src.angle_strategies.guess_provider import GuessProviderConstant, GuessProviderSeries
+from src.angle_strategies.search_space import SearchSpaceControlled
 from src.angle_strategies.space_dimension_provider import SpaceDimensionProviderRelative, SpaceDimensionProviderAbsolute
 from src.data_processing import merge_dfs, numpy_str_to_array
 from src.graph_utils import get_max_edge_depth, is_isomorphic
@@ -113,9 +114,10 @@ def init_dataframe(data_path: str, worker: WorkerQAOABase, out_path: str):
 def run_graphs_parallel():
     nodes = list(range(9, 10))
     depths = list(range(3, 4))
-    ps = list(range(1, 6))
+    ps = list(range(1, 2))
     # param_vals = np.linspace(0.1, 1, 10)
     param_vals = [None]
+    search_space = SearchSpaceControlled()
 
     num_workers = 20
     convergence_threshold = 0.9995
@@ -125,10 +127,9 @@ def run_graphs_parallel():
         node_depths = [3] if node < 12 else depths
         for depth in node_depths:
             for param in param_vals:
-                print(f'Param: {param}')
+                # print(f'Param: {param}')
                 for p in ps:
-                    # out_path_suffix = f'output/ma_subspace/gradient/qaoa/frac_{param:.1g}/out.csv'
-                    out_path_suffix = f'output/qaoa/constant/0.2/basinhopping/out.csv'
+                    out_path_suffix = f'output/controlled/out.csv'
                     out_col = f'p_{p}'
                     transfer_from = None if p == 1 else f'p_{p - 1}'
                     transfer_p = None if p == 1 else p - 1
@@ -144,7 +145,7 @@ def run_graphs_parallel():
                     # worker_subspace = WorkerSubspaceMA(out_col=out_col, reader=reader, p=p, guess_provider=guess_provider, transfer_from=transfer_from, transfer_p=transfer_p,
                     #                                    basis_provider=basis_provider)
                     worker = WorkerStandard(out_col=out_col, reader=reader, p=p, guess_provider=guess_provider, transfer_from=transfer_from, transfer_p=transfer_p,
-                                            search_space='qaoa')
+                                            search_space=search_space)
 
                     data_path = f'graphs/main/nodes_{node}/depth_{depth}/'
                     out_path = data_path + out_path_suffix

@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 from src.angle_strategies.direct import interp_qaoa_angles, convert_angles_qaoa_to_fourier, convert_angles_fourier_to_qaoa
 from src.angle_strategies.guess_provider import GuessProviderBase
-from src.angle_strategies.search_space import SearchSpace
+from src.angle_strategies.search_space import SearchSpaceGeneral, SearchSpace
 from src.angle_strategies.basis_provider import BasisProviderBase
 from src.data_processing import numpy_str_to_array, normalize_qaoa_angles
 from src.graph_utils import get_index_edge_list
@@ -264,7 +264,7 @@ class WorkerSubspaceMA(WorkerQAOABase):
             evaluator_ma = self.get_evaluator(graph, 'ma')
             basis, nfev_basis = self.basis_provider.provide_basis(evaluator_ma, series)
             shift, nfev_shift = self.get_initial_angles(evaluator_ma, series)
-            search_space = SearchSpace(basis, shift)
+            search_space = SearchSpaceGeneral(basis, shift)
             evaluator = self.get_evaluator(graph, search_space)
             initial_angles = np.array([0] * evaluator.num_angles)
             try:

@@ -25,18 +25,18 @@ def duplicate_angles(input_angles: ndarray, duplication_scheme: list[ndarray]) -
     return output_angles
 
 
-def convert_angles_qaoa_to_ma(angles: ndarray, num_edges: int, num_nodes: int) -> ndarray:
+def convert_angles_qaoa_to_ma(angles: ndarray, num_phase_terms: int, num_qubits: int) -> ndarray:
     """
     Repeats each QAOA angle necessary number of times to convert QAOA angle format to MA-QAOA.
     :param angles: angles in QAOA format (2 per layer).
-    :param num_edges: Number of edges in the graph.
-    :param num_nodes: Number of nodes in the graph.
+    :param num_phase_terms: Number of terms in the phase operator.
+    :param num_qubits: Number of qubits.
     :return: angles in MA-QAOA format (individual angle for each node and edge of the graph in each layer).
     """
     maqaoa_angles = []
     for gamma, beta in zip(angles[::2], angles[1::2]):
-        maqaoa_angles += [gamma] * num_edges
-        maqaoa_angles += [beta] * num_nodes
+        maqaoa_angles += [gamma] * num_phase_terms
+        maqaoa_angles += [beta] * num_qubits
     return np.array(maqaoa_angles)
 
 
@@ -52,6 +52,21 @@ def qaoa_decorator(ma_qaoa_func: callable, num_edges: int, num_nodes: int) -> ca
         angles_maqaoa = convert_angles_qaoa_to_ma(args[0], num_edges, num_nodes)
         return ma_qaoa_func(angles_maqaoa, *args[1:], **kwargs)
     return qaoa_wrapped
+
+
+def convert_angles_qaoa_to_controlled_ma(angles: ndarray, num_phase_terms: int, num_qubits: int) -> ndarray:
+    """
+    Transforms angles from QAOA to controlled MA.
+    :param angles: QAOA angles.
+    :param num_phase_terms: Number of terms in the phase operator.
+    :param num_qubits: Number of qubits.
+    :return: 1D array of the corresponding coordinates in controlled MA space.
+    """
+    controlled_ma_angles = []
+    for gamma, beta in zip(angles[::2], angles[1::2]):
+        controlled_ma_angles += [gamma] * num_phase_terms
+        controlled_ma_angles += [beta / (num_qubits - 1)] * 2 * (num_qubits - 1) * num_qubits
+    return np.array(controlled_ma_angles)
 
 
 def convert_angles_fourier_to_qaoa(fourier_angles: ndarray) -> ndarray:
