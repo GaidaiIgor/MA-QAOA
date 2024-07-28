@@ -4,12 +4,35 @@ from typing import Sequence
 
 import addcopyfighandler
 import numpy as np
-from matplotlib import pyplot as plt
+from matplotlib import pyplot as plt, cm
 
 from src.data_processing import exponential_form, polynomial_form, DataExtractor, fit_data, exponential_form_const, polynomial_form_const, generate_dataset_paths
+from src.optimization.evaluator import Evaluator
 from src.plots.plot_general import colors, Line, plot_general, save_figure, data_matrix_to_lines
 
 assert addcopyfighandler, "Adds an option to copy figures by pressing Ctrl+C"
+
+
+def plot_qaoa_expectation_2d():
+    target_vals = np.array([0, 5, 1, 0])
+    driver_term_vals = np.diag(target_vals)
+    p = 2
+    search_space = 'qaoa'
+    evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, search_space)
+    evaluator.fix_params([0, 1], [np.pi / 2, 0.392699081698724])
+
+    gammas = np.linspace(-np.pi / 2, np.pi / 2, 100)
+    betas = np.linspace(-np.pi / 2, np.pi / 2, 100)
+    gamma_mesh, beta_mesh = np.meshgrid(gammas, betas)
+    expectation = np.zeros_like(gamma_mesh)
+    for i in range(expectation.shape[0]):
+        for j in range(expectation.shape[1]):
+            point = np.array([gamma_mesh[i, j], beta_mesh[i, j]])
+            expectation[i, j] = evaluator.evaluate(point)
+
+    fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+    surf = ax.plot_surface(gamma_mesh, beta_mesh, expectation, cmap=cm.coolwarm, linewidth=0, antialiased=False)
+    fig.colorbar(surf, shrink=0.5, aspect=5)
 
 
 def plot_methods_9_nodes_general(methods: list[str], x_func: callable, y_func: callable, max_p: int = 10, transpose: bool = False, **kwargs):
@@ -282,6 +305,7 @@ def plot_ar_vs_p_optimizers():
 
 
 if __name__ == "__main__":
+    plot_qaoa_expectation_2d()
     # plot_ar_vs_p_heuristics_qaoa_attempts_1()
     # plot_ar_vs_p_heuristics_qaoa_attempts_p()
     # plot_ar_vs_p_heuristics_ma_attempts_1()
@@ -294,6 +318,6 @@ if __name__ == "__main__":
     # plot_ar_vs_p_constant()
     # plot_ar_vs_cost_qaoa_heuristics()
     # plot_ar_vs_p_fitted_nodes()
-    plot_ar_vs_p_optimizers()
+    # plot_ar_vs_p_optimizers()
 
     plt.show()
