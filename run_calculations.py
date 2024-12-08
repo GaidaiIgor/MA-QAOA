@@ -17,7 +17,7 @@ from src.angle_strategies.search_space import SearchSpaceControlled
 from src.angle_strategies.space_dimension_provider import SpaceDimensionProviderRelative, SpaceDimensionProviderAbsolute
 from src.data_processing import merge_dfs, numpy_str_to_array
 from src.graph_utils import get_max_edge_depth, is_isomorphic
-from src.parallel import optimize_expectation_parallel, WorkerGreedy, WorkerSubspaceMA, WorkerQAOABase, WorkerIterativePerturb, WorkerStandard
+from src.parallel import optimize_expectation_parallel, WorkerGreedy, WorkerSubspaceMA, WorkerQAOABase, WorkerIterativePerturb, WorkerStandard, WorkerIterative
 
 
 def generate_graphs():
@@ -119,7 +119,7 @@ def run_graphs_parallel():
     param_vals = [None]
     search_space = SearchSpaceControlled()
 
-    num_workers = 20
+    num_workers = 1
     convergence_threshold = 0.9995
     reader = partial(nx.read_gml, destringizer=int)
 
@@ -127,15 +127,13 @@ def run_graphs_parallel():
         node_depths = [3] if node < 12 else depths
         for depth in node_depths:
             for param in param_vals:
-                # print(f'Param: {param}')
                 for p in ps:
                     out_path_suffix = f'output/controlled/out.csv'
                     out_col = f'p_{p}'
                     transfer_from = None if p == 1 else f'p_{p - 1}'
                     transfer_p = None if p == 1 else p - 1
 
-                    guess_provider = GuessProviderConstant()
-                    # guess_provider = GuessProviderSeries(format='qaoa', guess_from=f'p_{p}_angles', cost_from=None)
+                    guess_provider = GuessProviderConstant(search_space=search_space)
 
                     # dimension_provider = SpaceDimensionProviderAbsolute(num_dims=param)
                     # dimension_provider = SpaceDimensionProviderRelative(param_fraction=param)
@@ -149,11 +147,7 @@ def run_graphs_parallel():
 
                     data_path = f'graphs/main/nodes_{node}/depth_{depth}/'
                     out_path = data_path + out_path_suffix
-
                     rows_func = lambda df: np.ones((df.shape[0], ), dtype=bool) if p == 1 else df[f'p_{p - 1}'] < convergence_threshold
-                    # mask = np.zeros((1000, 1), dtype=bool)
-                    # mask[36:] = True
-                    # rows_func = lambda df: mask
 
                     out_folder = path.split(out_path)[0]
                     if not path.exists(out_folder):

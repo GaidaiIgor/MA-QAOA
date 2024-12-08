@@ -62,7 +62,12 @@ def optimize_qaoa_angles(evaluator: Evaluator, starting_angles: ndarray = None, 
 
     result_best = None
     for i in range(num_restarts):
-        next_angles = random.uniform(-np.pi / 2, np.pi / 2, evaluator.num_angles) if starting_angles is None else starting_angles
+        # next_angles = random.uniform(-np.pi / 2, np.pi / 2, evaluator.num_angles) if starting_angles is None else starting_angles
+        if starting_angles is None:
+            next_angles = np.concatenate((random.uniform(-np.pi / 4, 0, evaluator.num_phase_terms), random.uniform(0, np.pi / 2, evaluator.num_angles - evaluator.num_phase_terms)))
+        else:
+            next_angles = starting_angles
+
         result = optimize.minimize(change_sign(evaluator.func), next_angles, method=method, options=options, **kwargs)
         if check_success and not result.success:
             logger.warning(f'Optimization with {method} failed with the following message:')

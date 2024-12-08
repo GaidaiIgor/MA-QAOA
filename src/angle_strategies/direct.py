@@ -3,6 +3,7 @@ Functions that translate given parameters to MA-QAOA angles.
 """
 
 import itertools as it
+from typing import Sequence
 
 import numpy as np
 from numpy import ndarray
@@ -54,18 +55,23 @@ def qaoa_decorator(ma_qaoa_func: callable, num_edges: int, num_nodes: int) -> ca
     return qaoa_wrapped
 
 
-def convert_angles_qaoa_to_controlled_ma(angles: ndarray, num_phase_terms: int, num_qubits: int) -> ndarray:
+def convert_angles_ma_to_controlled_ma(angles: ndarray, num_phase_terms: int, num_qubits: int) -> ndarray:
     """
-    Transforms angles from QAOA to controlled MA.
-    :param angles: QAOA angles.
+    Transforms angles from MA-QAOA to controlled MA.
+    :param angles: MA-QAOA angles.
     :param num_phase_terms: Number of terms in the phase operator.
     :param num_qubits: Number of qubits.
     :return: 1D array of the corresponding coordinates in controlled MA space.
     """
     controlled_ma_angles = []
-    for gamma, beta in zip(angles[::2], angles[1::2]):
-        controlled_ma_angles += [gamma] * num_phase_terms
-        controlled_ma_angles += [beta / (num_qubits - 1)] * 2 * (num_qubits - 1) * num_qubits
+    angles_per_layer = num_phase_terms + num_qubits
+    p = len(angles) // angles_per_layer
+    for layer in range(p):
+        layer_angles = angles[layer * angles_per_layer : (layer + 1) * angles_per_layer]
+        controlled_ma_angles += layer_angles[:num_phase_terms].tolist()
+        mixer_angles = layer_angles[num_phase_terms:]
+        for qubit_ind in range(num_qubits):
+            controlled_ma_angles += [0] * qubit_ind + [mixer_angles[qubit_ind]] + [0] * (num_qubits - qubit_ind - 1)
     return np.array(controlled_ma_angles)
 
 
@@ -194,7 +200,7 @@ def interp_qaoa_angles(angles: ndarray, p: int) -> ndarray:
     return np.squeeze(new_angle_series.reshape((1, -1)))
 
 
-def fix_angles(eval_func: callable, num_angles: int, inds: list[int], values: list[float]) -> callable:
+def fix_angles(eval_func: callable, num_angles: int, inds: Sequence, values: Sequence) -> callable:
     """
     Decorator that returns an evaluator function with specified input elements fixed to the specified values.
     :param eval_func: Original evaluator function that accepts ndarray of angles.

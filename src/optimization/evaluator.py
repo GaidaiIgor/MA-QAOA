@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Sequence
 
 import numpy as np
 from networkx import Graph
@@ -26,6 +26,7 @@ class Evaluator:
     :var p: Number of QAOA layers.
     :var num_qubits: Number of qubits.
     :var num_phase_terms: Number of terms in the phase operator.
+    :var fixed_inds: Fixed indices.
     """
     func: Callable[[ndarray], float]
     num_angles: int
@@ -33,6 +34,7 @@ class Evaluator:
     p: int
     num_qubits: int
     num_phase_terms: int
+    fixed_inds: Sequence = None
 
     @staticmethod
     def wrap_parameter_strategy(ma_qaoa_func: callable, num_qubits: int, num_phase_terms: int, p: int, search_space: str | SearchSpace = 'ma') -> Evaluator:
@@ -165,12 +167,13 @@ class Evaluator:
         result = self.func(angles)
         return result
 
-    def fix_params(self, inds, values):
+    def fix_params(self, inds: Sequence, values: Sequence):
         """
         Fixes specified parameters to specified values.
         :param inds: Indices to fix.
         :param values: Fixed values.
         :return: None.
         """
+        self.fixed_inds = inds
         self.func = fix_angles(self.func, self.num_angles, inds, values)
         self.num_angles -= len(inds)

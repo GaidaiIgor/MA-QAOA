@@ -13,7 +13,7 @@ from pandas import DataFrame, Series
 from scipy.optimize import OptimizeResult
 from tqdm import tqdm
 
-from src.angle_strategies.direct import interp_qaoa_angles, convert_angles_qaoa_to_fourier, convert_angles_fourier_to_qaoa
+from src.angle_strategies.direct import interp_qaoa_angles, convert_angles_qaoa_to_fourier, convert_angles_fourier_to_qaoa, convert_angles_ma_to_controlled_ma
 from src.angle_strategies.guess_provider import GuessProviderBase
 from src.angle_strategies.search_space import SearchSpaceGeneral, SearchSpace
 from src.angle_strategies.basis_provider import BasisProviderBase
@@ -108,7 +108,7 @@ class WorkerQAOABase(WorkerExplicit, ABC):
         initial_angles, nfev = guess_provider.provide_guess(evaluator, series)
         return initial_angles, nfev
 
-    def optimize_angles(self, evaluator: Evaluator, series: Series, starting_angles: ndarray) -> OptimizeResult:
+    def optimize_angles(self, evaluator: Evaluator, series: Series, starting_angles: ndarray, **kwargs) -> OptimizeResult:
         """
         Optimizes angles.
         :param evaluator: Expectation evaluator.
@@ -116,7 +116,7 @@ class WorkerQAOABase(WorkerExplicit, ABC):
         :param starting_angles: Starting angles for optimization.
         :return: Optimization result.
         """
-        optimization_result = optimize_qaoa_angles(evaluator, starting_angles=starting_angles, series=series)
+        optimization_result = optimize_qaoa_angles(evaluator, starting_angles=starting_angles, series=series, **kwargs)
         return optimization_result
 
     def write_standard(self, series: Series, optimization_result: OptimizeResult):
@@ -183,6 +183,32 @@ class WorkerQAOABase(WorkerExplicit, ABC):
             except Exception:
                 raise Exception(f'Optimization failed at {path}')
             optimization_result.nfev += nfev
+        else:
+            optimization_result = None
+        new_series = self.update_series(series, optimization_result)
+        return new_series
+
+
+@dataclass(kw_only=True)
+class WorkerIterative(WorkerQAOABase):
+    """ Worker that fixes previous best angles and optimizes only the last layer. """
+
+    def process_job_item(self, job_item: tuple[bool, Series]) -> Series:
+        optimize, series = job_item
+        if optimize:
+            path = series['path']
+            graph = self.reader(path)
+            evaluator = self.get_evaluator(graph)
+            # DEBUG
+            previous_angles = convert_angles_ma_to_controlled_ma(numpy_str_to_array(series[f'p_{evaluator.p - 1}_angles']), evaluator.num_phase_terms, evaluator.num_qubits)
+            evaluator.fix_params(list(range(len(previous_angles))), previous_angles)
+            starting_angles, nfev = self.get_initial_angles(evaluator, series)
+            try:
+                optimization_result = self.optimize_angles(evaluator, series, starting_angles)
+            except Exception:
+                raise Exception(f'Optimization failed at {path}')
+            optimization_result.nfev += nfev
+            optimization_result.x = np.concatenate((previous_angles, optimization_result.x))
         else:
             optimization_result = None
         new_series = self.update_series(series, optimization_result)

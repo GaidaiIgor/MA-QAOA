@@ -4,6 +4,7 @@ from typing import Sequence
 
 import addcopyfighandler
 import numpy as np
+from numpy import ndarray
 from matplotlib import pyplot as plt, cm
 
 from src.data_processing import exponential_form, polynomial_form, DataExtractor, fit_data, exponential_form_const, polynomial_form_const, generate_dataset_paths
@@ -11,6 +12,13 @@ from src.optimization.evaluator import Evaluator
 from src.plots.plot_general import colors, Line, plot_general, save_figure, data_matrix_to_lines
 
 assert addcopyfighandler, "Adds an option to copy figures by pressing Ctrl+C"
+
+
+def plot_state_vector_distribution(state_vector: ndarray, func_vals: ndarray = None):
+    if func_vals is not None:
+        order = np.argsort(func_vals)
+        state_vector = state_vector[order]
+    plt.bar(list(range(len(state_vector))), abs(state_vector) ** 2)
 
 
 def plot_qaoa_expectation_2d():

@@ -8,8 +8,8 @@ from numpy import ndarray
 from numpy import random
 from pandas import Series
 
-from src.angle_strategies.direct import convert_angles_tqa_to_qaoa, convert_angles_linear_to_qaoa, convert_angles_qaoa_to_ma, convert_angles_qaoa_to_controlled_ma
-from src.angle_strategies.search_space import SearchSpaceControlled
+from src.angle_strategies.direct import convert_angles_tqa_to_qaoa, convert_angles_linear_to_qaoa, convert_angles_qaoa_to_ma, convert_angles_ma_to_controlled_ma
+from src.angle_strategies.search_space import SearchSpaceControlled, SearchSpace
 from src.data_processing import numpy_str_to_array
 from src.optimization.optimization import Evaluator
 
@@ -18,9 +18,9 @@ from src.optimization.optimization import Evaluator
 class GuessProviderBase(ABC):
     """
     Base class for guess providers.
-    :var format: Format of the provided guess.
+    :var search_space: Search space in which the guess is made.
     """
-    format: str
+    search_space: str | SearchSpace
 
     @abstractmethod
     def provide_initial_guess(self, evaluator: Evaluator, series: Series = None) -> tuple[ndarray, int]:
@@ -39,22 +39,23 @@ class GuessProviderBase(ABC):
         :param evaluator: Target evaluator for compatibility.
         :return: Evaluator-compatible angles.
         """
-        if self.format != evaluator.search_space:
+        if self.search_space != evaluator.search_space:
             if evaluator.search_space == 'qaoa':
-                if self.format == 'tqa':
+                if self.search_space == 'tqa':
                     angles = convert_angles_tqa_to_qaoa(angles, evaluator.p)
-                elif self.format == 'linear':
+                elif self.search_space == 'linear':
                     angles = convert_angles_linear_to_qaoa(angles, evaluator.p)
                 else:
                     raise Exception('Unknown angle conversion')
             elif evaluator.search_space == 'ma':
-                if self.format == 'qaoa':
+                if self.search_space == 'qaoa':
                     angles = convert_angles_qaoa_to_ma(angles, evaluator.num_phase_terms, evaluator.num_qubits)
                 else:
                     raise Exception('Unknown angle conversion')
             elif isinstance(evaluator.search_space, SearchSpaceControlled):
-                if self.format == 'qaoa':
-                    angles = convert_angles_qaoa_to_controlled_ma(angles, evaluator.num_phase_terms, evaluator.num_qubits)
+                if self.search_space == 'qaoa':
+                    angles_ma = convert_angles_qaoa_to_ma(angles, evaluator.num_phase_terms, evaluator.num_qubits)
+                    angles = convert_angles_ma_to_controlled_ma(angles_ma, evaluator.num_phase_terms, evaluator.num_qubits)
                 else:
                     raise Exception('Unknown angle conversion')
             else:
@@ -70,6 +71,8 @@ class GuessProviderBase(ABC):
         """
         initial_guess, nfev = self.provide_initial_guess(evaluator, series)
         initial_guess = self.convert_angles_format(initial_guess, evaluator)
+        if evaluator.fixed_inds is not None:
+            initial_guess = np.delete(initial_guess, evaluator.fixed_inds)
         return initial_guess, nfev
 
 
@@ -88,17 +91,31 @@ class GuessProviderConstant(GuessProviderBase):
     Provides constant guess independent of input series.
     :var const_val: Value of the constant for the guess.
     """
-    format: str = 'qaoa'
+    search_space: str | SearchSpace = 'qaoa'
     const_val: float = 0.2
 
-    def __post_init__(self):
-        assert self.format == 'qaoa', 'format has to be qaoa for GuessProviderConstant'
+    def get_num_repeats_gamma(self, evaluator: Evaluator):
+        if self.search_space == 'qaoa':
+            return 1
+        elif isinstance(self.search_space, SearchSpaceControlled):
+            return evaluator.num_phase_terms
+        else:
+            raise Exception('Unknown search space for this guess provider')
+
+    def get_num_repeats_beta(self, evaluator: Evaluator):
+        if self.search_space == 'qaoa':
+            return 1
+        elif isinstance(self.search_space, SearchSpaceControlled):
+            return evaluator.num_qubits ** 2
+        else:
+            raise Exception('Unknown search space for this guess provider')
 
     def provide_initial_guess(self, evaluator: Evaluator, series: Series = None) -> tuple[ndarray, int]:
-        gammas = [self.const_val] * evaluator.p
-        betas = [-self.const_val] * evaluator.p
-        initial_angles = np.array(list(it.chain(*zip(gammas, betas))))
-        return initial_angles, 0
+        initial_angles = []
+        for i in range(evaluator.p):
+            initial_angles += [self.const_val] * self.get_num_repeats_gamma(evaluator)
+            initial_angles += [-self.const_val] * self.get_num_repeats_beta(evaluator)
+        return np.array(initial_angles), 0
 
 
 @dataclass(kw_only=True)

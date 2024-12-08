@@ -88,6 +88,8 @@ def apply_mixer_standard(betas: ndarray, psi: ndarray, apply_y: bool = False) ->
     :return: New quantum state vector.
     """
     for i in range(len(betas)):
+        if betas[i] == 0:
+            continue
         exp_x = get_exp_x(betas[i])
         psi = apply_unitary_one_qubit(i, exp_x, psi, len(betas))
         if apply_y:
@@ -99,21 +101,28 @@ def apply_mixer_standard(betas: ndarray, psi: ndarray, apply_y: bool = False) ->
 @njit
 def apply_mixer_controlled(betas: ndarray, psi: ndarray) -> ndarray:
     """
-    Applies controlled mixer to a given state psi. The mixer consists of layers of X-gates controlled on 0 and 1 by each qubit sequentially.
-    :param betas: 1D array with rotation angles for each gate in the mixer, specified in the column-first order (on a quantum circuit). Size: 2 * #qubits ** 2.
+    Applies controlled mixer to a given state psi. The mixer consists of layers of X-gates controlled by each qubit sequentially.
+    :param betas: 1D array with rotation angles for each gate in the mixer, specified in the column-first order (on a quantum circuit). Size: #qubits ** 2.
     :param psi: Current quantum state vector. Size: 2 ** #qubits.
     :return: New quantum state vector. Size: 2 ** #qubits.
     """
     num_qubits = round(np.log2(len(psi)))
-    gate_ind = 0
     for control_ind in range(num_qubits):
-        for control_val in [0, 1]:
+        for sign in [1, -1]:
             for target_ind in range(num_qubits):
                 if control_ind == target_ind:
                     continue
-                exp_x = get_exp_x(betas[gate_ind])
-                psi = apply_unitary_one_qubit(target_ind, exp_x, psi, num_qubits, control_ind, control_val)
-                gate_ind += 1
+                beta = betas[control_ind * num_qubits + target_ind]
+                if beta == 0:
+                    continue
+                exp_x = np.exp(sign * 1j * beta) * get_exp_x(sign * beta)
+                psi = apply_unitary_one_qubit(target_ind, exp_x, psi, num_qubits, control_ind, 1)
+
+            if sign == 1:
+                beta = betas[control_ind * (num_qubits + 1)]
+                if beta != 0:
+                    exp_x = get_exp_x(beta)
+                    psi = apply_unitary_one_qubit(control_ind, exp_x, psi, num_qubits)
     return psi
 
 

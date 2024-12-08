@@ -34,15 +34,7 @@ class SearchSpace(ABC):
 
 @dataclass
 class SearchSpaceControlled(SearchSpace):
-    """
-    Class that represents search space of controlled (MA-) QAOA.
-    :var independent_phase: True to allow using independent angles between different terms of the phase operator.
-    :var independent_controls: True to allow using independent angles between gates with controls on different qubits.
-    :var independent_qubits: True to allow using independent angles between gates with target on different qubits.
-    """
-    independent_phase: bool = True
-    independent_controls: bool = True
-    independent_qubits: bool = True
+    """ Class that represents search space of controlled (MA-)QAOA. """
 
     def get_num_angles(self, num_phase_terms: int, num_qubits: int, p: int) -> int:
         """
@@ -52,14 +44,8 @@ class SearchSpaceControlled(SearchSpace):
         :param p: Number of QAOA layers.
         :return: Number of adjustable variables.
         """
-        num_angles_phase = num_phase_terms if self.independent_phase else 1
-        if self.independent_controls and self.independent_qubits:
-            num_angles_mixer = 2 * num_qubits * (num_qubits - 1)
-        elif self.independent_controls or self.independent_qubits:
-            num_angles_mixer = 2 * num_qubits
-        else:
-            num_angles_mixer = 2
-        return (num_angles_phase + num_angles_mixer) * p
+        num_angles_mixer = num_qubits ** 2
+        return (num_phase_terms + num_angles_mixer) * p
 
     def transform_coordinates(self, coordinates: ndarray, num_phase_terms: int, num_qubits: int, p: int) -> ndarray:
         """
@@ -70,33 +56,7 @@ class SearchSpaceControlled(SearchSpace):
         :param p: Number of QAOA layers.
         :return: 1D array of the corresponding coordinates in the original space.
         """
-        if self.independent_phase and self.independent_controls and self.independent_qubits:
-            return coordinates
-
-        angles_per_layer = len(coordinates) // p
-        full_coords = []
-        for layer_ind in range(p):
-            layer_angles = coordinates[layer_ind * angles_per_layer : (layer_ind + 1) * angles_per_layer]
-            if self.independent_phase:
-                full_coords += layer_angles[:num_phase_terms].tolist()
-                mixer_angles = layer_angles[num_phase_terms:]
-            else:
-                full_coords += [layer_angles[0]] * num_phase_terms
-                mixer_angles = layer_angles[1:]
-
-            if self.independent_controls and self.independent_qubits:
-                full_coords += mixer_angles.tolist()
-            elif self.independent_controls:
-                full_coords += list(it.chain.from_iterable([angle] * (num_qubits - 1) for angle in mixer_angles))
-            elif self.independent_qubits:
-                mixer_subsets = np.reshape(mixer_angles, (2, -1))
-                for i in range(num_qubits):
-                    for control_val in range(2):
-                        full_coords += mixer_subsets[control_val, :i].tolist()
-                        full_coords += mixer_subsets[control_val, i + 1:].tolist()
-            else:
-                full_coords += (mixer_angles[0] * (num_qubits - 1) + mixer_angles[1] * (num_qubits - 1)) * num_qubits
-        return np.array(full_coords)
+        return coordinates
 
     def apply_interface(self, ma_func: callable, num_phase_terms: int, num_qubits: int, p: int) -> callable:
         """

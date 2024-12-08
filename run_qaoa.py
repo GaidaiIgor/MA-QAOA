@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
+from src.angle_strategies.direct import convert_angles_ma_to_controlled_ma
 from src.angle_strategies.guess_provider import GuessProviderConstant
 from src.angle_strategies.search_space import SearchSpaceControlled
 from src.optimization.evaluator import Evaluator
@@ -34,13 +35,28 @@ def run_add_graph():
 
 
 def run_point():
-    target_vals = np.array([0, 5, 1, 0])
-    driver_term_vals = np.diag(target_vals)
-    p = 2
+    # target_vals = np.array([0, 5, 1, 0])
+    # driver_term_vals = np.diag(target_vals)
+    # graph = nx.read_gml('graphs/main/nodes_9/depth_3/112.gml', destringizer=int)
+    # graph = nx.complete_graph(3)
+    graph = nx.graph_atlas(14)
+
+    p = 1
     search_space = SearchSpaceControlled()
+
     # point = np.array([np.pi / 2, 0.392699081698724])
-    point = np.array([0, np.pi/10, np.pi/2, 0, np.pi/4, np.pi/4, 0, 0] + [0, 0, 0, 0, 0, np.pi/2, 0, -np.pi/4])
-    evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, search_space)
+    # point = np.array([0.262, 0.262, 0.262, 0.262, 0.496, -0.017, 0.442, 0.308, 0.289, 0.508, 0.308, 0.344, 0.278, 0.308,
+    #                   -0.785, -0.000, -0.785, 0.000, -0.786, -0.786, 0.000, -0.000, -0.785])
+    # point = np.array([-0.25] * len(graph.edges) + [0, 0, 0.25, 0.25]) * np.pi
+    # point = np.array([-0.250, 0, 0, 0.125, 0.125, 0, 0, 0, -0.250, -0.250, 0, 0, 0.250, 0.250]) * np.pi
+    # point = np.array([-0.250, 0, 0, 0.125, 0.125, 0, 0]) * np.pi
+    point = np.array([-0.250, 0.250, -0.500, 0.250, 0.500, 0.250, 0.500, 0.500, 0.250, 0.250, 0.000, 0.250, 0.250, 0.500, 0.250, 0, 0, 0, -0.000]) * np.pi
+
+    # point = convert_angles_ma_to_controlled_ma(point, len(graph.edges), len(graph))
+    # angles_p2 = np.array([0] * len(graph.edges) + [0] * 8 + [0, 0.5, 0.25, 0] + [0] * 4) * np.pi
+    # point = np.concatenate((point, angles_p2))
+    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
+    # evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, search_space)
     print(evaluator.evaluate(point))
 
 
@@ -59,20 +75,29 @@ def run_point_ibm():
 
 
 def run_optimization():
-    target_vals = np.array([0, 5, 1, 0])
-    driver_term_vals = np.diag(target_vals)
-    p = 2
-    search_space = 'ma'
+    # graph = nx.read_gml('graphs/main/nodes_9/depth_3/112.gml', destringizer=int)
+    # graph = nx.read_gml('graphs/other/simple/n3_e3.gml', destringizer=int)
+    graph = nx.graph_atlas(14)
 
-    evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, search_space)
-    # evaluator.fix_params([0, 1], [np.pi / 2, 0.392699081698724])
-    evaluator.fix_params(list(range(6)), [0, np.pi/10, np.pi/2, 0, np.pi/4, 0])
-    guess_provider = GuessProviderConstant()
-    starting_angles = guess_provider.provide_guess(evaluator)[0][6:]
-    # starting_angles = np.array([0, np.pi/10, np.pi/2, 0, np.pi/4, np.pi/4])
-    res = optimize_qaoa_angles(evaluator, starting_angles)
+    # target_vals = np.array([0, 5, 1, 0])
+    # driver_term_vals = np.diag(target_vals)
+    p = 1
+    search_space = SearchSpaceControlled()
+
+    evaluator = Evaluator.get_evaluator_standard_maxcut(graph, p, search_space=search_space)
+    # evaluator = Evaluator.get_evaluator_general(target_vals, driver_term_vals, p, search_space)
+    # fixed_angles = np.array([-0.25] * len(graph.edges) + [0, 0, 0.25, 0.25]) * np.pi
+    # evaluator.fix_params(list(range(len(fixed_angles))), fixed_angles)
+
+    # guess_provider = GuessProviderConstant()
+    # starting_angles = guess_provider.provide_guess(evaluator)[0]
+    # starting_angles = np.array([np.pi / 4, -np.pi / 4])
+    starting_angles = np.array([-0.25] * len(graph.edges) + [0.25] * len(graph) ** 2) * np.pi
+    # starting_angles = None
+
+    res = optimize_qaoa_angles(evaluator, starting_angles, method='SLSQP')
     print(res)
-    print(repr(res.x))
+    print(repr(res.x / np.pi))
 
 
 def run_draw_graph():
@@ -90,8 +115,8 @@ if __name__ == '__main__':
     # Select procedure to run below
     start = time.perf_counter()
     # run_add_graph()
-    # run_point()
-    run_point_ibm()
+    # run_point_ibm()
+    run_point()
     # run_optimization()
     # run_draw_graph()
     end = time.perf_counter()
