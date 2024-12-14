@@ -2,7 +2,7 @@
 import qiskit
 from networkx import Graph
 from qiskit import converters
-from qiskit_aer.primitives import Estimator as AerEstimator
+from qiskit_aer.primitives import EstimatorV2 as AerEstimator
 from qiskit_ibm_runtime import Options, Session, QiskitRuntimeService, Estimator as IbmEstimator
 
 from src.optimization.evaluator import Evaluator
@@ -25,7 +25,8 @@ class EvaluatorQiskit(Evaluator):
         ansatz = get_qaoa_ansatz(graph, p)
         observable = get_observable_maxcut(graph)
 
-        estimator = AerEstimator(approximation=True, run_options={'shots': 1024})
+        estimator = AerEstimator()
+        # estimator = AerEstimator(approximation=True, run_options={'shots': 1024})
         # backend = Aer.get_backend('aer_simulator')
         # estimator = BackendEstimator(backend)
 
